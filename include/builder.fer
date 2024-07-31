@@ -1,0 +1,191 @@
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+let mproc = import('std/multiproc');
+let logging = import('std/logging');
+let platform = import('std/platform');
+
+let base = import('./builderModules/base');
+let addLib = import('./builderModules/addLib');
+let context = import('./builderModules/context');
+let findLib = import('./builderModules/findLib');
+let findPkg = import('./builderModules/findPkg');
+let binaryHooks = import('./builderModules/binaryHooks');
+
+#############################################################################################################
+
+let Builder = struct(
+	deps = vec.new(refs = true),
+	libs = vec.new(refs = true)
+);
+Builder.setTypeName('Builder');
+
+let builderInstance = Builder();
+builderInstance.deps.push(findLib.feralLib);
+
+let get = fn() { return ref(builderInstance); };
+
+#############################################################################################################
+
+# These functions are used by pkg - for project setup.
+
+let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDependencyPaths, task) {
+	context.pkgName = pkgName;
+	context.pkgNameLower = pkgName.lower();
+	context.pkgVersion = pkgVersion;
+	context.pkgSourcePath = pkgSourcePath;
+	context.pkgInstallPath = pkgInstallPath;
+	context.pkgBuildPath = fs.pathFrom(context.pkgSourcePath, 'build');
+	context.pkgBinaryPath = fs.pathFrom(context.pkgSourcePath, 'bin');
+	context.pkgBinaryBuildPath = fs.pathFrom(context.pkgBuildPath, 'bin');
+	context.pkgDependencyPaths = pkgDependencyPaths;
+	context.task = task;
+};
+
+let build = fn(output = nil) {
+	let ehWhatever = import(fs.pathFrom(context.pkgSourcePath, 'build')) or e {
+		io.ecprintln('{r}Unable to import build script of the package:{0} ', e);
+		return nil;
+	};
+	if ehWhatever == nil { return false; }
+	if !get().build(output) {
+		io.ecprintln('{r}Builder for package: ', context.pkgName, ' failed!{0}');
+		return false;
+	}
+	return true;
+};
+
+let run = fn(source) {
+	# run the binary hook
+	os.exec(feral.binaryPath + ' ' + fs.pathFrom(context.pkgBinaryBuildPath, source + '.fer'));
+};
+
+#############################################################################################################
+
+let build in Builder = fn(output) {
+	let cmakeListsPath = fs.pathFrom(context.pkgSourcePath, 'CMakeLists.txt');
+	let cmakeCachePath = fs.pathFrom(context.pkgBuildPath, 'CMakeCache.txt');
+
+	let depsStr = '';
+	for d in self.deps.each() {
+		depsStr += d.build() + '\n';
+	}
+	let libsStr = '';
+	for l in self.libs.each() {
+		libsStr += l.build() + '\n';
+	}
+
+	{
+		# this is inside a block as file must be closed before it is used in cmake command
+		let data = base.template.fmt();
+		let file = fs.fopen(fs.pathFrom(cmakeListsPath), 'w+');
+		io.fprintln(file, data);
+	}
+
+	let changed = false;
+	# forces cmake to always execute and ignore grep command on windows
+	if os.name == 'windows' && fs.exists(cmakeCachePath) {
+		fs.remove(context.pkgBuildPath);
+	}
+	if !fs.exists(cmakeCachePath) {
+		fs.mkdir(context.pkgBuildPath);
+		changed = true;
+	} elif os.exec('grep CMAKE_BUILD_TYPE ' + cmakeCachePath + ' | grep ' + context.pkgBuildType + '>/dev/null 2>&1') != 0 {
+		fs.remove(context.pkgBuildPath);
+		fs.mkdir(context.pkgBuildPath);
+		changed = true;
+	}
+
+	let cwd = os.getCWD();
+	defer os.setCWD(cwd);
+	os.setCWD(context.pkgBuildPath);
+
+	# Generate build hooks
+	if fs.exists(context.pkgBinaryPath) {
+		let binaries = fs.walkDir(context.pkgBinaryPath, fs.WALK_FILES, '(.*)\\.fer');
+		if !fs.exists(context.pkgBinaryBuildPath) { fs.mkdir(context.pkgBinaryBuildPath); }
+		for binary in binaries.each() {
+			let binName = binary.substr(binary.rfind(fs.pathSeparator) + 1);
+			binName = binName.substr(0, binName.rfind('.'));
+			if !self.deps.empty() {
+
+			}
+			let bin = binaryHooks.new(binName, context.pkgDependencyPaths);
+			bin.build();
+		}
+	}
+
+	let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
+	if changed && os.exec(cmakeCmd, output) != 0 {
+		io.ecprintln('{r}Failed to execute cmake!{0}');
+		return false;
+	}
+	let makeCmd = self.getMakeCmd();
+	if makeCmd == nil {
+		io.ecprintln('Failed to generate make command: ', e);
+		return false;
+	}
+	if os.exec(makeCmd, output) != 0 {
+		io.ecprintln('{r}Failed to execute make!{0}');
+		return false;
+	}
+	return true;
+};
+
+let findLibrary in Builder = fn(name) {
+	let lib = findLib.new(name);
+	self.deps.push(lib);
+	return ref(lib);
+};
+
+let addSystemLibrary in Builder = fn(name) {
+	let pkg = findPkg.new(name);
+	self.deps.push(pkg);
+	return ref(pkg);
+};
+
+let addLibrary in Builder = fn(name, srcs...) {
+	let lib = addLib.new(name, srcs...);
+	lib.dependsOn(findLib.feralLib);
+	self.libs.push(lib);
+	return ref(lib);
+};
+
+let addRPath in Builder = fn(rpath) { self.installRPaths += ';' + rpath; return ref(self); };
+
+let setRelativeRPath in Builder = fn(rpathFromOrigin) { self.rpathFromOrigin = rpathFromOrigin; return ref(self); };
+
+let setPrefix in Builder = fn(prefix) { self.prefix = prefix; return ref(self); };
+
+let getCMakeCmd in Builder = fn(cmakeListsPath) {
+	let cmd = 'cmake ' + cmakeListsPath + ' --no-warn-unused-cli -DDISABLE_INSTALL_MSG=true -DCMAKE_EXPORT_COMPILE_COMMANDS=true -DCMAKE_BUILD_TYPE=' + context.pkgBuildType;
+	if os.name == 'windows' {
+		cmd += ' -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=true';
+	}
+	return cmd + ' 2>&1';
+};
+
+let getMakeCmd in Builder = fn() {
+	let cmd = '';
+	if os.name == 'windows' {
+		let msbuild = platform.getMSBuildPath();
+		if msbuild.empty() {
+			io.ecprintln('{r}msbuild not found. Cannot build project!{0}');
+			return nil;
+		}
+		cmd = '"' + msbuild + '" /p:CL_MPCount=2 /p:Configuration=' + context.pkgBuildType + ' -m:';
+		cmd += mproc.getConcurrency().str();
+	} else {
+		cmd = 'make -j';
+	}
+	let suffix = '';
+	if os.name == 'windows' { suffix = ' .\\ALL_BUILD.vcxproj'; }
+	if context.task == 'install' {
+		if os.name == 'windows' { suffix = ' .\\INSTALL.vcxproj'; }
+		else { suffix = ' install'; }
+	} elif context.task == 'build' || context.task == 'run' {
+		if os.name == 'windows' { suffix = ' .\\ALL_BUILD.vcxproj'; }
+	}
+	return cmd + suffix + ' 2>&1';
+};

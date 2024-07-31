@@ -1,0 +1,89 @@
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+let fecl = import('std/fecl');
+let time = import('std/time');
+let logging = import('std/logging');
+let argparse = import('std/argparse');
+
+let pkg = import('pkg/pkg');
+
+let args = argparse.new();
+args.add('version', 'v').setHelp('Display program version');
+args.add('help', 'h').setHelp('Display this program help');
+args.add('force', 'f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
+args.parse(feral.args);
+
+if args.getArgsCount() == 0 {
+	io.ecprintln('{r}Please provide the task to perform{0} - (b)uild|(r)un|(i)nstall|re(m)ove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
+	feral.exit(1);
+}
+
+# For remove, need to store all the cmake Installing... lines from pkg installation
+
+inline if os.name == 'windows' {
+} else {
+let logFileName = '/tmp/feralPkg.log';
+}
+
+logging.addTargetByName(logFileName, logging.Levels.TRACE, false);
+
+pkg.init();
+
+let task = args.popArg();
+
+let pkgNames = vec.new(refs = true);
+for arg in args.getArgs().each() {
+	pkgNames.push(arg);
+}
+
+if task == 'build' || task == 'b' {
+	# Builds the package (build.fer) in current directory
+	if !pkg.build() { feral.exit(1); }
+} elif task == 'run' || task == 'r' {
+	# Builds and runs the package (build.fer) in the current directory
+	#if !fs.exists()
+	#let tmp = import(build.fer);
+	if !pkg.run() { feral.exit(1); }
+} elif task == 'install' || task == 'i' {
+	if pkgNames.empty() {
+		io.ecprintln('{r}Please provide a (list of) package(s) to install or \'.\' to build and install package in current directory');
+		feral.exit(1);
+	}
+	if !pkg.install(args.has('force'), pkgNames) {
+		feral.exit(1);
+	}
+} elif task == 'remove' || task == 'm' {
+	if pkgNames.empty() {
+		io.ecprintln('{r}Please provide a (list of) package(s) to remove{0}');
+		feral.exit(1);
+	}
+	if !pkg.remove(pkgNames) {
+		feral.exit(1);
+	}
+} elif task == 'update' || task == 'u' {
+	if !pkg.update() {
+		feral.exit(1);
+	}
+} elif task == 'upgrade' || task == 'g' {
+	# optionally takes pkgNames and upgrades only those packages.
+	if !pkg.upgrade(pkgNames) {
+		feral.exit(1);
+	}
+} elif task == 'info' || task == 'n' {
+	if pkgNames.empty() {
+		io.ecprintln('{r}Please provide a (list of) package(s) to fetch info for');
+		feral.exit(1);
+	}
+	if !pkg.info(pkgNames) {
+		feral.exit(1);
+	}
+} elif task == 'list' || task == 'l' {
+	# optionally takes pkgNames and searches in the list for package names that contain one of the pkgNames.
+	if !pkg.list(pkgNames) {
+		feral.exit(1);
+	}
+}
+
+# Fetch PkgIndex repository

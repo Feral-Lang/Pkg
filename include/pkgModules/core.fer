@@ -1,0 +1,50 @@
+# Core variables/definitions
+
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let fecl = import('std/fecl');
+
+let rootDir = fs.pathFrom(feral.installPath, 'lib', 'pkg');
+let rootConfigPath = fs.pathFrom(rootDir, 'config.fecl');
+
+let defaultRootConfig = `indexLastUpdated = 0;`;
+
+inline if os.name == 'windows' {
+let gitCmd = os.findExec('git.exe');
+} else {
+let gitCmd = os.findExec('git');
+}
+
+if gitCmd.empty() {
+	raise('Could not find git in PATH. Cannot continue!');
+}
+
+let loadConfig = fn(path) {
+	if !fs.exists(path) {
+		writeConfig(path, loadConfigStr(defaultRootConfig));
+	}
+	let configStr = fs.fopen(path, 'r').readAll();
+	return loadConfigStr(configStr);
+};
+
+let loadConfigStr = fn(configStr) {
+	return fecl.loads(configStr);
+};
+
+let writeConfig = fn(path, configObj) {
+	let file = fs.fopen(path, 'w+');
+	io.fprintln(file, fecl.dumps(configObj, 0, '    '));
+};
+
+let getPkgDownloadCmd = fn(pkgConfig, downloadLocation) {
+	let cmd = gitCmd;
+	cmd += ' clone ';
+	cmd += pkgConfig.source;
+	cmd += ' --branch ';
+	cmd += pkgConfig.version;
+	cmd += ' ';
+	cmd += downloadLocation;
+	cmd += ' 2>&1';
+	return cmd;
+};
