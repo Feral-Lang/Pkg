@@ -1,0 +1,102 @@
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let map = import('std/map');
+let vec = import('std/vec');
+let fecl = import('std/fecl');
+let time = import('std/time');
+let logging = import('std/logging');
+
+let core = import('./pkgModules/core');
+let index = import('./pkgModules/index');
+let installer = import('./pkgModules/installer');
+
+let defaultConfig =
+`indexLastUpdated = 0;
+# format: name = { '<version>' = 'manual' / 'auto'; ... }; ...
+installed = {};`;
+
+let init = fn() {
+	let firstRun = false;
+
+	logging.trace('Checking if dir exists: ', core.rootDir);
+	if !fs.dirExists(core.rootDir) {
+		logging.info('Dir: ', core.rootDir, ' does not exist. Creating it');
+		fs.mkdir(core.rootDir);
+		logging.info('Successfully created dir: ', core.rootDir);
+	}
+
+	logging.trace('Checking if config exists: ', core.rootConfigPath);
+	if !fs.exists(core.rootConfigPath) {
+		logging.trace('Config: ', core.rootConfigPath, ' does not exist. Will perform first time setup');
+		logging.trace('Creating core config file');
+		let config = core.loadConfigStr(defaultConfig);
+		core.writeConfig(core.rootConfigPath, config);
+		logging.trace('Created core config file successfully');
+		firstRun = true;
+	}
+
+	if firstRun {
+		logging.info('Detected first time execution of pkg. Setting things up');
+		io.cprintln('{y}Pkg is running for the first time, setting things up{0}...');
+		logging.trace('Setting up package index');
+		if index.update() {
+			logging.trace('Finished setting up package index');
+			return true;
+		}
+		logging.trace('Failed to setup the package index');
+		return false;
+	}
+};
+
+let update = fn() { return index.update(); };
+
+let install = fn(forceAlreadyInstalled, pkgNames) {
+	index.warnToUpdate();
+	for pkgName in pkgNames.each() {
+		if !index.packageExists(pkgName) {
+			logging.fatal('Could not find package: ', pkgName);
+			io.ecprintln('{r}Package: ', pkgName, ' does not exist!{0}');
+			return false;
+		}
+	}
+	for pkgName in pkgNames.each() {
+		let pkgConfig = index.getPackageConfig(pkgName);
+		if !installer.installPackage(pkgConfig, forceAlreadyInstalled) { return false; }
+	}
+	return true;
+};
+
+let list = fn(pkgRegexes) {
+	index.warnToUpdate();
+	let lst = index.getPackageList(pkgRegexes);
+	logging.trace('Found packages: ', lst.len());
+	io.println('The following packages are available in the package index:');
+	for item in lst.each() {
+		item = item.substr(item.rfind(fs.pathSeparator) + 1);
+		item = item.substr(0, item.find('.'));
+		logging.info('- ', item);
+		io.cprintln('- {g}', item, '{0}');
+	}
+	return true;
+};
+
+let pkgModulePaths = vec.new();
+
+let pkgModuleFinder = fn(module, isimport) {
+	if !isimport { return nil; }
+	let moduleFile = module + '.fer';
+	for moduleDir in pkgModulePaths.each() {
+		let testPath = fs.pathFrom(moduleDir, moduleFile);
+		if fs.exists(testPath) { return testPath; }
+	}
+	return nil;
+};
+
+feral.moduleFinders.push(pkgModuleFinder);
+
+let addModuleFinderPaths = fn(paths...) {
+	for p in paths.each() {
+		pkgModulePaths.push(p);
+	}
+};

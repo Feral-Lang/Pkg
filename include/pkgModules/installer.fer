@@ -1,0 +1,133 @@
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let map = import('std/map');
+let vec = import('std/vec');
+let logging = import('std/logging');
+
+let core = import('./core');
+let index = import('./index');
+let builder = import('../builder');
+
+let installRootDir = fs.pathFrom(core.rootDir, 'installed');
+let downloadDir = fs.pathFrom(core.rootDir, 'downloads');
+
+if !fs.dirExists(installRootDir) {
+	fs.mkdir(installRootDir);
+}
+
+let loadConfig = fn() {
+	return core.loadConfig(core.rootConfigPath);
+};
+let writeConfig = fn(config) {
+	return core.writeConfig(core.rootConfigPath, config);
+};
+
+let getPkgDownloadPath = fn(pkgConfig) {
+	return fs.pathFrom(downloadDir, pkgConfig.name, pkgConfig.version);
+};
+
+let getPkgInstallPath = fn(pkgConfig) {
+	if pkgConfig['disableVersionedInstallPath'] {
+		return fs.pathFrom(installRootDir, pkgConfig.name, 'current');
+	}
+	return fs.pathFrom(installRootDir, pkgConfig.name, pkgConfig.version);
+};
+
+let isPkgInstalled = fn(config, pkgConfig) {
+	let pkgc = ref(config['installed'][pkgConfig.name]);
+	if pkgc == nil { return false; }
+	for item in pkgc.each() {
+		if pkgConfig.version == item.0 { return true; }
+	}
+	return false;
+};
+
+# Auto => installed as dependency
+# Manual => user installed
+let addPkgToConfig = fn(config, pkgConfig, manualOrAuto) {
+	if config['installed'][pkgConfig.name] == nil {
+		config['installed'].insert(pkgConfig.name, map.new());
+	}
+	let pkgc = ref(config['installed'][pkgConfig.name]);
+	if pkgConfig['disableVersionedInstallPath'] {
+		# Only one version can be installed at any time.
+		pkgc.clear();
+	}
+	if pkgc[pkgConfig.version] == nil {
+		pkgc.insert(pkgConfig.version, manualOrAuto);
+	} else {
+		pkgc[pkgConfig.version] = manualOrAuto;
+	}
+};
+
+let removePkgFromConfig = fn(config, pkgConfig) {
+	let pkgc = ref(config['installed'][pkgConfig.name]);
+	if pkgc == nil || pkgc[pkgConfig.version] == nil { return; }
+	pkgc.erase(pkgConfig.version);
+	if pkgc.empty() {
+		config['installed'].erase(pkgConfig.name);
+	}
+};
+
+# pkgConfig => config from the index
+let installPackage = fn(pkgConfig, forceInstall, manualOrAuto = 'manual') {
+	let pkgInstallPath = getPkgInstallPath(pkgConfig);
+	let config = loadConfig();
+	if manualOrAuto == 'auto' {
+		io.cprintln('Installing package dependency: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
+	} else {
+		io.cprintln('Installing package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
+	}
+	if isPkgInstalled(config, pkgConfig) {
+		if !forceInstall {
+			io.cprintln('{y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] is already installed{0}');
+			return true;
+		}
+	}
+	fs.remove(pkgInstallPath);
+	let depPaths = vec.new(pkgInstallPath);
+	if pkgConfig['depends'] != nil {
+		io.cprintln('Installing {y}', pkgConfig['depends'].len(), '{0} dependencies ...');
+		for dep in pkgConfig.depends.each() {
+			let depConfig = index.getPackageConfig(dep.0);
+			depConfig.version = dep.1;
+			if !installPackage(depConfig, forceInstall, 'auto') {
+				return false;
+			}
+			depPaths.push(getPkgInstallPath(depConfig));
+		}
+	}
+	# download package
+	let pkgDownloadPath = getPkgDownloadPath(pkgConfig);
+	if fs.dirExists(pkgDownloadPath) { fs.remove(pkgDownloadPath); }
+	let cmd = core.getPkgDownloadCmd(pkgConfig, pkgDownloadPath);
+	io.cprintln('Downloading: ', cmd);
+	let outLines = vec.new(refs = true);
+	if os.exec(cmd, outLines) != 0 || outLines.empty() {
+		io.ecprintln('{r}Failed to download package: ', pkgConfig.name);
+		return false;
+	}
+	for o in outLines.each() {
+		logging.info('-- ', o);
+	}
+	let cwd = os.getCWD();
+	defer os.setCWD(cwd);
+	os.setCWD(pkgDownloadPath);
+	builder.setBuildInfo(pkgConfig.name, pkgConfig.version, pkgDownloadPath, pkgInstallPath, depPaths, 'install');
+	outLines.clear();
+	io.cprintln('Building ...');
+	let res = builder.build(outLines);
+	for o in outLines.each() {
+		logging.info('-- ', o);
+	}
+	if res {
+		addPkgToConfig(config, pkgConfig, 'manual');
+		writeConfig(config);
+		io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully');
+	} else {
+		io.cprintln('Package: {y}', pkgConfig.name, '{0} installation failed');
+	}
+	fs.remove(pkgDownloadPath);
+	return res;
+};

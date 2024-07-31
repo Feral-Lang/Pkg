@@ -1,0 +1,106 @@
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+let time = import('std/time');
+let logging = import('std/logging');
+
+let core = import('./core');
+
+let indexRootDir = fs.pathFrom(core.rootDir, 'index');
+let indexListDir = fs.pathFrom(indexRootDir, 'pkgs');
+
+let indexRepo = 'https://github.com/Feral-Lang/PkgIndex';
+
+# Must not be run if core.rootDir doesn't exist.
+let update = fn() {
+	logging.trace('Checking if package index repository exists: ', indexRootDir);
+	let repoExists = fs.exists(indexRootDir);
+	let output = vec.new(refs = true);
+	if !repoExists {
+		logging.trace('Package index repository does not exist. Creating it: ', indexRootDir);
+		let cmd = core.gitCmd + ' clone --depth=1 ' + indexRepo + ' ' + indexRootDir + ' 2>&1';
+		let res = os.exec(cmd, output);
+		for o in output.each() {
+			logging.trace('-- ', o);
+		}
+		if res != 0 || output.empty() {
+			logging.fatal('Failed to setup package index repository');
+			io.ecprintln('{r}Failed to setup package index repository!{0}');
+			return false;
+		}
+		logging.trace('Package index repository creation succeeded!');
+	} else {
+		let cmd = core.gitCmd + ' pull 2>&1';
+		let cwd = os.getCWD();
+		os.setCWD(indexRootDir);
+		let res = os.exec(cmd, output);
+		for o in output.each() {
+			logging.trace(o);
+		}
+		os.setCWD(cwd);
+		if res != 0 || output.empty() {
+			for out in output.each() {
+				logging.fatal('-- ', out);
+			}
+			logging.fatal('Failed to update package index repository');
+			io.ecprintlnt('{r}Failed to update package index repository!');
+			return false;
+		}
+		logging.trace('Package index repository has been updated');
+	}
+	let config = core.loadConfig(core.rootConfigPath);
+	config.indexLastUpdated = time.now();
+	core.writeConfig(core.rootConfigPath, config);
+	return true;
+};
+
+let getPackageConfig = fn(pkgName) {
+	let pkgConfigPath = getPackageConfigPathIfExists(pkgName);
+	if pkgConfigPath == nil { return nil; }
+	let configStr = fs.fopen(pkgConfigPath, 'r').readAll();
+	return core.loadConfigStr(configStr);
+};
+
+let packageExists = fn(pkgName) {
+	return getPackageConfigPathIfExists(pkgName) != nil;
+};
+
+let getPackageConfigPathIfExists = fn(pkgName) {
+	let pkgConfigPath = fs.pathFrom(indexListDir, pkgName + '.fecl');
+	if fs.exists(pkgConfigPath) { return ref(pkgConfigPath); }
+	return nil;
+};
+
+let getPackageList = fn(pkgRegexes) {
+	let regex = '';
+	let regexCount = pkgRegexes.len();
+	for let i = 0; i < regexCount; ++i {
+		regex += pkgRegexes[i] + '\\.fecl';
+		if i < regexCount - 1 { regex += '|'; }
+	}
+	if regexCount == 0 {
+		regex = '(.*)\\.fecl';
+	}
+	logging.info('Fetching package list using regex: ', regex);
+	return fs.walkDir(indexListDir, fs.WALK_FILES, regex);
+};
+
+let warnToUpdate = fn() {
+	if !shouldUpdate() { return; }
+	logging.warn('Package index hasn\'t been updated for more than a week. Recommeded to update it!');
+	logging.warn('-- Use `feral pkg update` to update it');
+	io.cprintln('{y}Package index hasn\'t been updated for more than a week. Recommended to update it!{0}');
+	io.cprintln('{y}Use `{g}feral pkg update{y}` to update it.{0}');
+};
+
+let shouldUpdate = fn() {
+	let config = core.loadConfig(core.rootConfigPath);
+	logging.info('Checking if pkg index should be updated (if it\'s been more than 7 days since it was last updated)');
+	let lastUpdateTime = config.indexLastUpdated;
+	let currentTime = time.now();
+	let microSecondsIn7Days = time.toMicroSeconds(days = 7);
+	logging.trace('Last updated at: ', lastUpdateTime, '; Current time: ', currentTime,
+		      '; Minimum (that Current - Last should be): ', microSecondsIn7Days);
+	return currentTime - lastUpdateTime > microSecondsIn7Days;
+};

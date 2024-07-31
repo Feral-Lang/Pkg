@@ -1,0 +1,8 @@
+Dir Structure:
+~/.feral/lib/pkg/:
+  - config.fecl: Contains list of packages that are installed by user - under 'user' key, and as a dependency under 'dependency' key.
+                 Also contains the time when the index was last updated.
+  - installed/:
+    - <dirs>: Packages' installtion directories in the format - <pkgName>/<version/tag>
+  - index/: git repository of the index
+    - pkgs/: Contains <pkgName>.fecl files of all packages that can be installed

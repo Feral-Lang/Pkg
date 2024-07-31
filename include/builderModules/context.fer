@@ -1,0 +1,14 @@
+let vec = import('std/vec');
+
+let cmakeVersion = feral.minCmakeVersion;
+let pkgName = 'TestProject';
+let pkgNameLower = 'testproject'; # for install directory
+let pkgVersion = '0.0.1';
+let pkgBuildType = feral.buildType;
+let pkgSourcePath = '.';
+let pkgBuildPath = './build';
+let pkgInstallPath = './install';
+let pkgBinaryPath = './bin';
+let pkgBinaryBuildPath = './build/bin';
+let pkgDependencyPaths = vec.new();
+let task = 'build'; # or install or run
