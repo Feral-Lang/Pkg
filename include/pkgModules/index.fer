@@ -19,8 +19,8 @@ let update = fn() {
 	let output = vec.new(refs = true);
 	if !repoExists {
 		logging.trace('Package index repository does not exist. Creating it: ', indexRootDir);
-		let cmd = core.gitCmd + ' clone --depth=1 ' + indexRepo + ' ' + indexRootDir + ' 2>&1';
-		let res = os.exec(cmd, output);
+		let cmd = vec.new(refs = true, core.gitCmd, 'clone', '--depth=1', indexRepo, indexRootDir, '^2>&1');
+		let res = os.exec(cmd, out = output);
 		for o in output.each() {
 			logging.trace('-- ', o);
 		}
@@ -31,10 +31,10 @@ let update = fn() {
 		}
 		logging.trace('Package index repository creation succeeded!');
 	} else {
-		let cmd = core.gitCmd + ' pull 2>&1';
+		let cmd = vec.new(refs = true, core.gitCmd, 'pull', '^2>&1');
 		let cwd = os.getCWD();
 		os.setCWD(indexRootDir);
-		let res = os.exec(cmd, output);
+		let res = os.exec(cmd, out = output);
 		for o in output.each() {
 			logging.trace(o);
 		}
