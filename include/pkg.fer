@@ -51,7 +51,7 @@ let init = fn() {
 
 let update = fn() { return index.update(); };
 
-let install = fn(forceAlreadyInstalled, pkgNames) {
+let install = fn(pkgNames, args) {
 	index.warnToUpdate();
 	for pkgName in pkgNames.each() {
 		if !index.packageExists(pkgName) {
@@ -62,7 +62,7 @@ let install = fn(forceAlreadyInstalled, pkgNames) {
 	}
 	for pkgName in pkgNames.each() {
 		let pkgConfig = index.getPackageConfig(pkgName);
-		if !installer.installPackage(pkgConfig, forceAlreadyInstalled) { return false; }
+		if !installer.installPackage(pkgConfig, args) { return false; }
 	}
 	return true;
 };

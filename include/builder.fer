@@ -83,18 +83,18 @@ let build in Builder = fn(output) {
 		io.fprintln(file, data);
 	}
 
-	let changed = false;
+	let cmakeFileChanged = false;
 	# forces cmake to always execute and ignore grep command on windows
 	if os.name == 'windows' && fs.exists(cmakeCachePath) {
 		fs.remove(context.pkgBuildPath);
 	}
 	if !fs.exists(cmakeCachePath) {
 		fs.mkdir(context.pkgBuildPath);
-		changed = true;
+		cmakeFileChanged = true;
 	} elif os.exec('grep', 'CMAKE_BUILD_TYPE', cmakeCachePath, '^|', 'grep', context.pkgBuildType, '^>/dev/null', '^2>&1') != 0 {
 		fs.remove(context.pkgBuildPath);
 		fs.mkdir(context.pkgBuildPath);
-		changed = true;
+		cmakeFileChanged = true;
 	}
 
 	let cwd = os.getCWD();
@@ -116,17 +116,27 @@ let build in Builder = fn(output) {
 		}
 	}
 
-	let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
-	if changed && os.exec(cmakeCmd, out = output) != 0 {
-		io.ecprintln('{r}Failed to execute cmake!{0}');
-		return false;
+	if cmakeFileChanged {
+		logging.trace('Running cmake ...');
+		let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
+		let res = os.exec(cmakeCmd, out = output);
+		if res != 0 {
+			logging.fatal('Failed to execute cmake!');
+			io.ecprintln('{r}Failed to execute cmake!{0}');
+			return false;
+		}
 	}
+
+	logging.trace('Running make ...');
 	let makeCmd = self.getMakeCmd();
 	if makeCmd == nil {
-		io.ecprintln('Failed to generate make command: ', e);
+		logging.fatal('Failed to generate make command');
+		io.ecprintln('{r}Failed to generate make command!{0}');
 		return false;
 	}
-	if os.exec(makeCmd, out = output) != 0 {
+	let res = os.exec(makeCmd, out = output);
+	if res != 0 {
+		logging.fatal('Failed to execute make!');
 		io.ecprintln('{r}Failed to execute make!{0}');
 		return false;
 	}

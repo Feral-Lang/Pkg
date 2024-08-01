@@ -71,9 +71,11 @@ let removePkgFromConfig = fn(config, pkgConfig) {
 };
 
 # pkgConfig => config from the index
-let installPackage = fn(pkgConfig, forceInstall, manualOrAuto = 'manual') {
+let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 	let pkgInstallPath = getPkgInstallPath(pkgConfig);
 	let config = loadConfig();
+	let forceInstall = args.has('force');
+	let keepDownloads = args.has('keep');
 	if manualOrAuto == 'auto' {
 		io.cprintln('Installing package dependency: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
 	} else {
@@ -92,7 +94,7 @@ let installPackage = fn(pkgConfig, forceInstall, manualOrAuto = 'manual') {
 		for dep in pkgConfig.depends.each() {
 			let depConfig = index.getPackageConfig(dep.0);
 			depConfig.version = dep.1;
-			if !installPackage(depConfig, forceInstall, 'auto') {
+			if !installPackage(depConfig, args, 'auto') {
 				return false;
 			}
 			depPaths.push(getPkgInstallPath(depConfig));
@@ -112,26 +114,26 @@ let installPackage = fn(pkgConfig, forceInstall, manualOrAuto = 'manual') {
 		logging.info('-- ', o);
 	}
 	let cwd = os.getCWD();
-	defer os.setCWD(cwd);
 	os.setCWD(pkgDownloadPath);
 	builder.setBuildInfo(pkgConfig.name, pkgConfig.version, pkgDownloadPath, pkgInstallPath, depPaths, 'install');
 	outLines.clear();
 	io.cprintln('Building ...');
 	let res = builder.build(outLines);
+	os.setCWD(cwd);
+	if !keepDownloads { fs.remove(pkgDownloadPath); }
 	for o in outLines.each() {
 		logging.info('-- ', o);
 	}
-	if res {
-		addPkgToConfig(config, pkgConfig, 'manual');
-		writeConfig(config);
-		io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully');
-	} else {
+	if !res {
 		io.cprintln('Package: {y}', pkgConfig.name, '{0} installation failed');
+		return false;
 	}
+	addPkgToConfig(config, pkgConfig, 'manual');
+	writeConfig(config);
+	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully');
 	# Add pkgInstallPath to {feral.installPath}/.modulePaths
 	if pkgConfig['enableGlobalAvailability'] {
 		feral.addGlobalModulePaths(pkgInstallPath);
 	}
-	fs.remove(pkgDownloadPath);
 	return res;
 };
