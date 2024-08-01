@@ -81,7 +81,7 @@ let installPackage = fn(pkgConfig, forceInstall, manualOrAuto = 'manual') {
 	}
 	if isPkgInstalled(config, pkgConfig) {
 		if !forceInstall {
-			io.cprintln('{y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] is already installed{0}');
+			io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] already installed{0}');
 			return true;
 		}
 	}
@@ -104,7 +104,7 @@ let installPackage = fn(pkgConfig, forceInstall, manualOrAuto = 'manual') {
 	let cmd = core.getPkgDownloadCmd(pkgConfig, pkgDownloadPath);
 	io.cprintln('Downloading: ', cmd);
 	let outLines = vec.new(refs = true);
-	if os.exec(cmd, outLines) != 0 || outLines.empty() {
+	if os.exec(cmd, out = outLines) != 0 || outLines.empty() {
 		io.ecprintln('{r}Failed to download package: ', pkgConfig.name);
 		return false;
 	}

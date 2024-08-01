@@ -20,8 +20,9 @@ if args.getArgsCount() == 0 {
 	feral.exit(1);
 }
 
-let logFileName = fs.pathFrom(feral.tempPath, 'feralPkgBootstrap.log');
+let logFileName = fs.pathFrom(feral.tempPath, 'feralPkg.log');
 logging.addTargetByName(logFileName, logging.Levels.TRACE, false);
+io.println('Writing logs to: ', logFileName);
 
 pkg.init();
 

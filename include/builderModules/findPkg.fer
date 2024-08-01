@@ -86,10 +86,9 @@ if vcpkg == nil {
 }
 let vcpkgBin = fs.pathFrom(vcpkg, 'vcpkg.exe');
 let getVCPkgDependenceList in FindPackage = fn() {
-	let cmd = '"' + vcpkgBin + '" --triplet x64-windows depend-info ' + self.pkgName + ' 2>&1';
-	let outLines = vec.new();
-	if os.exec(cmd, outLines) != 0 {
-		raise('failed to get vcpkg dependence info for pkg: ', self.pkgName);
+	let outLines = vec.new(refs = true);
+	if os.exec(vcpkgBin, '--triplet', 'x64-windows', 'depend-info', self.pkgName, '^2>&1', out = outLines) != 0 {
+		raise('Failed to get vcpkg dependence info for pkg: ', self.pkgName);
 	}
 	let list = vec.new(refs = true);
 	for line in outLines.each() {
