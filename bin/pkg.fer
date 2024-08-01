@@ -13,6 +13,7 @@ let args = argparse.new();
 args.add('version', 'v').setHelp('Display program version');
 args.add('help', 'h').setHelp('Display this program help');
 args.add('force', 'f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
+args.add('keep', 'k').setHelp('Keep the intermediate files (downloads) when installing packages');
 args.parse(feral.args);
 
 if args.getArgsCount() == 0 {
@@ -22,7 +23,7 @@ if args.getArgsCount() == 0 {
 
 let logFileName = fs.pathFrom(feral.tempPath, 'feralPkg.log');
 logging.addTargetByName(logFileName, logging.Levels.TRACE, false);
-io.println('Writing logs to: ', logFileName);
+io.println('Writing full logs to: ', logFileName);
 
 pkg.init();
 
@@ -46,7 +47,7 @@ if task == 'build' || task == 'b' {
 		io.ecprintln('{r}Please provide a (list of) package(s) to install or \'.\' to build and install package in current directory');
 		feral.exit(1);
 	}
-	if !pkg.install(args.has('force'), pkgNames) {
+	if !pkg.install(pkgNames, args) {
 		feral.exit(1);
 	}
 } elif task == 'remove' || task == 'm' {

@@ -1,3 +1,4 @@
+let os = import('std/os');
 let vec = import('std/vec');
 
 let findLibBase =
@@ -17,6 +18,7 @@ let FindLib = struct(
 	template = findLibBase,
 	libName = '',
 	required = '',
+	# Use this to search for a library in paths (suffixes) within extPrefixes (which generates prefixPath - paths where to search for the library)
 	pathSuffixes = '',
 	extPrefixes = vec.new(),
 	feralLib = false
@@ -57,14 +59,18 @@ let build in FindLib = fn() {
 	let includeDirs = '';
 	let prefixPath = ' PATHS ';
 	for prefix in self.extPrefixes.each() {
-		includeDirs += prefix + '/include ';
-		prefixPath += prefix + '/lib ';
+		includeDirs += '"' + prefix + '/include" ';
+		prefixPath += '"' + prefix + '/lib" ';
 	}
 	if !self.extPrefixes.empty() {
 		includeDirs.pop();
 	}
 	if self.feralLib {
-		prefixPath += feral.installPath + '/lib/feral ';
+		prefixPath += '"' + feral.installPath + '/lib/feral" ';
+		if os.name == 'windows' {
+			# libferal.{dll,lib} are in the same folder as feral binary.
+			prefixPath += '"' + feral.installPath + '/bin" ';
+		}
 		self.libName = 'feral' + self.libName;
 	}
 	if prefixPath == ' PATHS ' {
@@ -78,4 +84,4 @@ let build in FindLib = fn() {
 
 # Feral library
 let feralLib = new('');
-feralLib.makeRequired().makeFeralLib().addPathSuffixes('feral');
+feralLib.makeRequired().makeFeralLib();
