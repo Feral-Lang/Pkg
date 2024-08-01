@@ -20,13 +20,7 @@ if args.getArgsCount() == 0 {
 	feral.exit(1);
 }
 
-# For remove, need to store all the cmake Installing... lines from pkg installation
-
-inline if os.name == 'windows' {
-} else {
-let logFileName = '/tmp/feralPkg.log';
-}
-
+let logFileName = fs.pathFrom(feral.tempPath, 'feralPkgBootstrap.log');
 logging.addTargetByName(logFileName, logging.Levels.TRACE, false);
 
 pkg.init();
