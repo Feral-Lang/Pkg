@@ -73,7 +73,7 @@ let list = fn(pkgRegexes) {
 	logging.trace('Found packages: ', lst.len());
 	io.println('The following packages are available in the package index:');
 	for item in lst.each() {
-		item = item.substr(item.rfind(fs.pathSeparator) + 1);
+		item = item.substr(item.rfind('/') + 1);
 		item = item.substr(0, item.find('.'));
 		logging.info('- ', item);
 		io.cprintln('- {g}', item, '{0}');

@@ -106,7 +106,7 @@ let build in Builder = fn(output) {
 		let binaries = fs.walkDir(context.pkgBinaryPath, fs.WALK_FILES, '(.*)\\.fer');
 		if !fs.exists(context.pkgBinaryBuildPath) { fs.mkdir(context.pkgBinaryBuildPath); }
 		for binary in binaries.each() {
-			let binName = binary.substr(binary.rfind(fs.pathSeparator) + 1);
+			let binName = binary.substr(binary.rfind('/') + 1);
 			binName = binName.substr(0, binName.rfind('.'));
 			if !self.deps.empty() {
 
