@@ -37,7 +37,7 @@ let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDep
 	context.pkgInstallPath = pkgInstallPath;
 	context.pkgBuildPath = fs.pathFrom(context.pkgSourcePath, 'build');
 	context.pkgBinaryPath = fs.pathFrom(context.pkgSourcePath, 'bin');
-	context.pkgBinaryBuildPath = fs.pathFrom(context.pkgBuildPath, 'bin');
+	context.pkgBinaryInstallPath = fs.pathFrom(context.pkgInstallPath, 'bin');
 	context.pkgDependencyPaths = pkgDependencyPaths;
 	context.task = task;
 };
@@ -56,8 +56,9 @@ let build = fn() {
 };
 
 let run = fn(source) {
-	# run the binary hook
-	os.exec(feral.binaryPath, fs.pathFrom(context.pkgBinaryBuildPath, source + '.fer'));
+	let envMap = map.new(refs = true);
+	envMap.insert('FERAL_PATHS', context.pkgDependencyPaths.join(os.envDelimiter));
+	os.exec(feral.binaryPath, fs.pathFrom(context.pkgSourcePath, source + '.fer', env = envMap));
 };
 
 #############################################################################################################
@@ -132,6 +133,17 @@ let build in Builder = fn() {
 		logging.fatal('Failed to execute make!');
 		io.ecprintln('{r}Failed to execute make!{0}');
 		return false;
+	}
+
+	if context.task != 'install' { return true; }
+	if fs.exists(context.pkgBinaryInstallPath) {
+		let files = fs.walkDir(context.pkgBinaryInstallPath);
+		for src in files.each() {
+			let dest = fs.pathFrom(feral.installPath, 'bin', fs.fmtWithPath('$f', src));
+			fs.mklink(src, dest);
+			logging.info('Installed binary (created symlink): ', dest, ' -> ', src);
+			io.cprintln('Installed binary: {g}', dest, '{0} -> {g}', src, '{0}');
+		}
 	}
 	return true;
 };
