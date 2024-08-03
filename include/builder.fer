@@ -11,7 +11,6 @@ let addLib = import('./builderModules/addLib');
 let context = import('./builderModules/context');
 let findLib = import('./builderModules/findLib');
 let findPkg = import('./builderModules/findPkg');
-let binaryHooks = import('./builderModules/binaryHooks');
 
 #############################################################################################################
 
@@ -43,13 +42,13 @@ let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDep
 	context.task = task;
 };
 
-let build = fn(output = nil) {
+let build = fn() {
 	let ehWhatever = import(fs.pathFrom(context.pkgSourcePath, 'build')) or e {
 		io.ecprintln('{r}Unable to import build script of the package:{0} ', e);
 		return nil;
 	};
 	if ehWhatever == nil { return false; }
-	if !get().build(output) {
+	if !get().build() {
 		io.ecprintln('{r}Builder for package: ', context.pkgName, ' failed!{0}');
 		return false;
 	}
@@ -63,7 +62,7 @@ let run = fn(source) {
 
 #############################################################################################################
 
-let build in Builder = fn(output) {
+let build in Builder = fn() {
 	let cmakeListsPath = fs.pathFrom(context.pkgSourcePath, 'CMakeLists.txt');
 	let cmakeCachePath = fs.pathFrom(context.pkgBuildPath, 'CMakeCache.txt');
 
@@ -101,25 +100,15 @@ let build in Builder = fn(output) {
 	defer os.setCWD(cwd);
 	os.setCWD(context.pkgBuildPath);
 
-	# Generate build hooks
-	if fs.exists(context.pkgBinaryPath) {
-		let binaries = fs.walkDir(context.pkgBinaryPath, fs.WALK_FILES, '(.*)\\.fer');
-		if !fs.exists(context.pkgBinaryBuildPath) { fs.mkdir(context.pkgBinaryBuildPath); }
-		for binary in binaries.each() {
-			let binName = binary.substr(binary.rfind('/') + 1);
-			binName = binName.substr(0, binName.rfind('.'));
-			if !self.deps.empty() {
-
-			}
-			let bin = binaryHooks.new(binName, context.pkgDependencyPaths);
-			bin.build();
-		}
-	}
-
+	let outLines = vec.new(refs = true);
 	if cmakeFileChanged {
 		logging.trace('Running cmake ...');
 		let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
-		let res = os.exec(cmakeCmd, out = output);
+		outLines.clear();
+		let res = os.exec(cmakeCmd, out = outLines);
+		for o in outLines.each() {
+			logging.info('-- ', o);
+		}
 		if res != 0 {
 			logging.fatal('Failed to execute cmake!');
 			io.ecprintln('{r}Failed to execute cmake!{0}');
@@ -134,7 +123,11 @@ let build in Builder = fn(output) {
 		io.ecprintln('{r}Failed to generate make command!{0}');
 		return false;
 	}
-	let res = os.exec(makeCmd, out = output);
+	outLines.clear();
+	let res = os.exec(makeCmd, out = outLines);
+	for o in outLines.each() {
+		logging.info('-- ', o);
+	}
 	if res != 0 {
 		logging.fatal('Failed to execute make!');
 		io.ecprintln('{r}Failed to execute make!{0}');
