@@ -28,9 +28,6 @@ let getPkgDownloadPath = fn(pkgConfig) {
 };
 
 let getPkgInstallPath = fn(pkgConfig) {
-	if pkgConfig['disableVersionedInstallPath'] {
-		return fs.pathFrom(installRootDir, pkgConfig.name, 'current');
-	}
 	return fs.pathFrom(installRootDir, pkgConfig.name, pkgConfig.version);
 };
 
@@ -116,24 +113,27 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 	let cwd = os.getCWD();
 	os.setCWD(pkgDownloadPath);
 	builder.setBuildInfo(pkgConfig.name, pkgConfig.version, pkgDownloadPath, pkgInstallPath, depPaths, 'install');
-	outLines.clear();
 	io.cprintln('Building ...');
-	let res = builder.build(outLines);
+	let res = builder.build();
 	os.setCWD(cwd);
 	if !keepDownloads { fs.remove(pkgDownloadPath); }
-	for o in outLines.each() {
-		logging.info('-- ', o);
-	}
 	if !res {
 		io.cprintln('Package: {y}', pkgConfig.name, '{0} installation failed');
 		return false;
 	}
+	# Add depPaths to {pkgInstallPath}/.modulePaths
+	# There shouldn't be any duplicates in it.
+	if !depPaths.empty() {
+		let pkgModulePathsFilePath = fs.pathFrom(pkgInstallPath, '.modulePaths');
+		let f = fs.fopen(pkgModulePathsFilePath, 'w+');
+		for p in depPaths.each() {
+			io.fprintln(f, p);
+		}
+	}
 	addPkgToConfig(config, pkgConfig, 'manual');
 	writeConfig(config);
 	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully');
-	# Add pkgInstallPath to {feral.installPath}/.modulePaths
-	if pkgConfig['enableGlobalAvailability'] {
-		feral.addGlobalModulePaths(pkgInstallPath);
-	}
+	# Add pkgInstallPath to {feral.installPath}/lib/.modulePaths
+	feral.addGlobalModulePaths(pkgInstallPath);
 	return res;
 };
