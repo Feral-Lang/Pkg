@@ -9,11 +9,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-macro(installSymlink filepath sympath)
-	install(CODE "execute_process(COMMAND $\\{CMAKE_COMMAND} -E create_symlink $\\{filepath} $\\{sympath})")
-	install(CODE "message(\\"-- Created symlink: $\\{filepath} -> $\\{sympath}\\")")
-endmacro(installSymlink)
-
 message("-- Install messages are now lazily shown")
 set(CMAKE_INSTALL_MESSAGE LAZY)
 
@@ -153,16 +148,7 @@ if(EXISTS "{context.pkgBinaryPath}")
 	)
 endif()
 
-# Install (create symlinks of) binaries if any
-# Here, install() doesn't work as file(INSTALL) must be used when
-# CMAKE_INSTALL_MODE is set in the configuration file instead of make install.
-if(EXISTS "{context.pkgBinaryPath}")
-	file(GLOB binaryFiles RELATIVE "$\\{PROJECT_SOURCE_DIR}" "bin/*")
-	foreach(binFile $\\{binaryFiles})
-		get_filename_component(binFileName $\\{binFile} NAME)
-		installSymlink("$\\{CMAKE_INSTALL_PREFIX}/bin/$\\{binFile}" "{feral.installPath}/bin/$\\{binFile}")
-	endforeach()
-endif()
+# The binaries are symlinked by the builder once the make install step is run.
 
 # Dependencies
 

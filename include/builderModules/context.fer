@@ -9,6 +9,6 @@ let pkgSourcePath = '.';
 let pkgBuildPath = './build';
 let pkgInstallPath = './install';
 let pkgBinaryPath = './bin';
-let pkgBinaryBuildPath = './build/bin';
+let pkgBinaryInstallPath = './install/bin';
 let pkgDependencyPaths = vec.new();
 let task = 'build'; # or install or run

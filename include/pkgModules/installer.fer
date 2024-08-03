@@ -101,7 +101,7 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 	let pkgDownloadPath = getPkgDownloadPath(pkgConfig);
 	if fs.dirExists(pkgDownloadPath) { fs.remove(pkgDownloadPath); }
 	let cmd = core.getPkgDownloadCmd(pkgConfig, pkgDownloadPath);
-	io.cprintln('Downloading: ', cmd);
+	io.cprintln('Downloading to: {g}', pkgDownloadPath, '{0}');
 	let outLines = vec.new(refs = true);
 	if os.exec(cmd, out = outLines) != 0 || outLines.empty() {
 		io.ecprintln('{r}Failed to download package: ', pkgConfig.name);
