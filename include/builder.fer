@@ -1,10 +1,10 @@
 let io = import('std/io');
 let fs = import('std/fs');
 let os = import('std/os');
+let map = import('std/map');
 let vec = import('std/vec');
 let mproc = import('std/multiproc');
 let logging = import('std/logging');
-let platform = import('std/platform');
 
 let base = import('./builderModules/base');
 let addLib = import('./builderModules/addLib');
@@ -175,10 +175,12 @@ let setPrefix in Builder = fn(prefix) { self.prefix = prefix; return ref(self); 
 
 let getCMakeCmd in Builder = fn(cmakeListsPath) {
 	let cmd = vec.new(refs = true, 'cmake', cmakeListsPath, '--no-warn-unused-cli',
-			  '-DDISABLE_INSTALL_MSG=true', '-DCMAKE_EXPORT_COMPILE_COMMANDS=true',
-			  '-DCMAKE_BUILD_TYPE=' + context.pkgBuildType);
+			  '-DDISABLE_INSTALL_MSG=true', '-DCMAKE_EXPORT_COMPILE_COMMANDS=true');
 	if os.name == 'windows' {
 		cmd.push('-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=true');
+	} else {
+		# no need for CMAKE_BUILD_TYPE on Windows because it's taken care of by the make step.
+		cmd.push('-DCMAKE_BUILD_TYPE=' + context.pkgBuildType);
 	}
 	cmd.push('^2>&1');
 	return cmd;
@@ -186,26 +188,14 @@ let getCMakeCmd in Builder = fn(cmakeListsPath) {
 
 let getMakeCmd in Builder = fn() {
 	let cmd = vec.new(refs = true);
+	# No need to do the whole msbuild charade when cmake has a lovely --build option!
+	cmd.push('cmake', '--build', '.', '-j' + mproc.getConcurrency().str());
 	if os.name == 'windows' {
-		let msbuild = platform.getMSBuildPath();
-		if msbuild.empty() {
-			io.ecprintln('{r}msbuild not found. Cannot build project!{0}');
-			return nil;
-		}
-		cmd.push(msbuild, '/p:CL_MPCount=2', '/p:Configuration=' + context.pkgBuildType,
-			 '-m:' + mproc.getConcurrency().str());
-	} else {
-		cmd.push('make', '-j');
+		cmd.push('--config', context.pkgBuildType);
 	}
-	let suffix = '';
-	if os.name == 'windows' { suffix = '.\\ALL_BUILD.vcxproj'; }
 	if context.task == 'install' {
-		if os.name == 'windows' { suffix = '.\\INSTALL.vcxproj'; }
-		else { suffix = 'install'; }
-	} elif context.task == 'build' || context.task == 'run' {
-		if os.name == 'windows' { suffix = '.\\ALL_BUILD.vcxproj'; }
+		cmd.push('--target', context.task);
 	}
-	if !suffix.empty() { cmd.push(suffix); }
 	cmd.push('^2>&1');
 	return cmd;
 };
