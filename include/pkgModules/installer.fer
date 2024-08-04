@@ -85,7 +85,7 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 		}
 	}
 	fs.remove(pkgInstallPath);
-	let depPaths = vec.new(pkgInstallPath);
+	let depPaths = vec.new(refs = true);
 	if pkgConfig['depends'] != nil {
 		io.cprintln('Installing {y}', pkgConfig['depends'].len(), '{0} dependencies ...');
 		for dep in pkgConfig.depends.each() {
@@ -116,7 +116,10 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 	io.cprintln('Building ...');
 	let res = builder.build();
 	os.setCWD(cwd);
-	if !keepDownloads { fs.remove(pkgDownloadPath); }
+	if !keepDownloads {
+		io.cprintln('Removing temporary downloaded files ...');
+		fs.remove(pkgDownloadPath);
+	}
 	if !res {
 		io.cprintln('Package: {y}', pkgConfig.name, '{0} installation failed');
 		return false;
@@ -124,6 +127,7 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 	# Add depPaths to {pkgInstallPath}/.modulePaths
 	# There shouldn't be any duplicates in it.
 	if !depPaths.empty() {
+		io.cprintln('Adding {y}', depPaths.len(), '{0} entries to module paths ...');
 		let pkgModulePathsFilePath = fs.pathFrom(pkgInstallPath, '.modulePaths');
 		let f = fs.fopen(pkgModulePathsFilePath, 'w+');
 		for p in depPaths.each() {
