@@ -67,38 +67,21 @@ let removePkgFromConfig = fn(config, pkgConfig) {
 	}
 };
 
-# pkgConfig => config from the index
-let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
+let downloadAndInstallPackage = fn(pkgConfig, manualOrAuto, forceInstall = false, keepDownloads = false) {
 	let pkgInstallPath = getPkgInstallPath(pkgConfig);
-	let config = loadConfig();
-	let forceInstall = args.has('force');
-	let keepDownloads = args.has('keep');
-	if manualOrAuto == 'auto' {
-		io.cprintln('Installing package dependency: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
-	} else {
-		io.cprintln('Installing package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
+	let pkgDownloadPath = '';
+	if !downloadPackage(pkgConfig, pkgDownloadPath) { return false; }
+	if !installPackage(pkgConfig, pkgDownloadPath, manualOrAuto, forceInstall, keepDownloads) { return false; }
+	if !keepDownloads {
+		io.cprintln('Removing source directory ...');
+		fs.remove(pkgDownloadPath);
 	}
-	if isPkgInstalled(config, pkgConfig) {
-		if !forceInstall {
-			io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] already installed{0}');
-			return true;
-		}
-	}
-	fs.remove(pkgInstallPath);
-	let depPaths = vec.new(refs = true);
-	if pkgConfig['depends'] != nil {
-		io.cprintln('Installing {y}', pkgConfig['depends'].len(), '{0} dependencies ...');
-		for dep in pkgConfig.depends.each() {
-			let depConfig = index.getPackageConfig(dep.0);
-			depConfig.version = dep.1;
-			if !installPackage(depConfig, args, 'auto') {
-				return false;
-			}
-			depPaths.push(getPkgInstallPath(depConfig));
-		}
-	}
-	# download package
-	let pkgDownloadPath = getPkgDownloadPath(pkgConfig);
+	return true;
+};
+
+# downloadPath is returned (it's an out variable)
+let downloadPackage = fn(pkgConfig, pkgDownloadPath) {
+	pkgDownloadPath = getPkgDownloadPath(pkgConfig);
 	if fs.dirExists(pkgDownloadPath) { fs.remove(pkgDownloadPath); }
 	let cmd = core.getPkgDownloadCmd(pkgConfig, pkgDownloadPath);
 	io.cprintln('Downloading to: {g}', pkgDownloadPath, '{0}');
@@ -110,18 +93,50 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 	for o in outLines.each() {
 		logging.info('-- ', o);
 	}
+	return true;
+};
+
+# pkgConfig => config from the index
+# keepDownloads is here only to be passed to downloadAndInstallPackage
+let installPackage = fn(pkgConfig, pkgSourcePath, manualOrAuto = 'manual', forceInstall = false, keepDownloads = false) {
+	let pkgInstallPath = getPkgInstallPath(pkgConfig);
+	let config = loadConfig();
+	if forceInstall && fs.exists(pkgInstallPath) {
+		logging.trace('Package: ', pkgConfig.name, '[', pkgConfig.version, '] already installed, deleting...');
+		io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] was already installed, deleting...');
+		removePkgFromConfig(config, pkgConfig);
+		fs.remove(pkgInstallPath);
+	}
+	if isPkgInstalled(config, pkgConfig) {
+		logging.trace('Package: ', pkgConfig.name, '[', pkgConfig.version, '] already installed!');
+		io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] already installed!');
+		return true;
+	}
+	let depPaths = vec.new(refs = true);
+	if pkgConfig['depends'] != nil {
+		io.cprintln('Installing {y}', pkgConfig['depends'].len(), '{0} dependencies ...');
+		for dep in pkgConfig.depends.each() {
+			let depConfig = index.getPackageConfig(dep.0);
+			depConfig.version = dep.1;
+			if !downloadAndInstallPackage(depConfig, 'auto', forceInstall, keepDownloads) {
+				return false;
+			}
+			depPaths.push(getPkgInstallPath(depConfig));
+		}
+	}
+	if manualOrAuto == 'auto' {
+		io.cprintln('Installing package dependency: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
+	} else {
+		io.cprintln('Installing package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] ...');
+	}
 	let cwd = os.getCWD();
-	os.setCWD(pkgDownloadPath);
-	builder.setBuildInfo(pkgConfig.name, pkgConfig.version, pkgDownloadPath, pkgInstallPath, depPaths, 'install');
+	os.setCWD(pkgSourcePath);
+	builder.setBuildInfo(pkgConfig.name, pkgConfig.version, pkgSourcePath, pkgInstallPath, depPaths, 'install');
 	io.cprintln('Building ...');
 	let res = builder.build();
 	os.setCWD(cwd);
-	if !keepDownloads {
-		io.cprintln('Removing temporary downloaded files ...');
-		fs.remove(pkgDownloadPath);
-	}
 	if !res {
-		io.cprintln('Package: {y}', pkgConfig.name, '{0} installation failed');
+		io.cprintln('Package: {y}', pkgConfig.name, '{0} installation failed!');
 		return false;
 	}
 	# Add depPaths to {pkgInstallPath}/.modulePaths
@@ -134,9 +149,9 @@ let installPackage = fn(pkgConfig, args, manualOrAuto = 'manual') {
 			io.fprintln(f, p);
 		}
 	}
-	addPkgToConfig(config, pkgConfig, 'manual');
+	addPkgToConfig(config, pkgConfig, manualOrAuto);
 	writeConfig(config);
-	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully');
+	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully!');
 	# Add pkgInstallPath to {feral.installPath}/lib/.modulePaths
 	feral.addGlobalModulePaths(pkgInstallPath);
 	return res;

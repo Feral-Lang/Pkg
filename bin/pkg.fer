@@ -17,7 +17,7 @@ args.add('keep', 'k').setHelp('Keep the intermediate files (downloads) when inst
 args.parse(feral.args);
 
 if args.getArgsCount() == 0 {
-	io.ecprintln('{r}Please provide the task to perform{0} - (b)uild|(r)un|(i)nstall|re(m)ove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
+	io.ecprintln('{r}Please provide the task to perform{0} - (b)uild|(i)nstall|re(m)ove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
 	feral.exit(1);
 }
 
@@ -35,13 +35,10 @@ for arg in args.getArgs().each() {
 }
 
 if task == 'build' || task == 'b' {
-	# Builds the package (build.fer) in current directory
-	if !pkg.build() { feral.exit(1); }
-} elif task == 'run' || task == 'r' {
-	# Builds and runs the package (build.fer) in the current directory
-	#if !fs.exists()
-	#let tmp = import(build.fer);
-	if !pkg.run() { feral.exit(1); }
+	if pkgNames.empty() { pkgNames.push('.'); }
+	if !pkg.build(pkgNames[0], args) {
+		feral.exit(1);
+	}
 } elif task == 'install' || task == 'i' {
 	if pkgNames.empty() {
 		io.ecprintln('{r}Please provide a (list of) package(s) to install or \'.\' to build and install package in current directory');

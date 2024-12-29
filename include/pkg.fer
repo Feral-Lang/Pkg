@@ -51,6 +51,20 @@ let init = fn() {
 
 let update = fn() { return index.update(); };
 
+let build = fn(pkgPath, args) {
+	index.warnToUpdate();
+	pkgPath = fs.absPath(pkgPath);
+	let configPath = fs.pathFrom(pkgPath, 'package.fecl');
+	if !fs.exists(configPath) {
+		logging.fatal('Could not find a package.fecl config in path: ', pkgPath);
+		io.ecprintln('{r}Could not find a package.fecl config file in path: ', pkgPath);
+		return false;
+	}
+	let pkgConfig = core.loadConfig(configPath);
+	if !installer.installPackage(pkgConfig, pkgPath, 'manual', true) { return false; }
+	return true;
+};
+
 let install = fn(pkgNames, args) {
 	index.warnToUpdate();
 	for pkgName in pkgNames.each() {
@@ -60,9 +74,13 @@ let install = fn(pkgNames, args) {
 			return false;
 		}
 	}
+	let keepDownloads = args.has('keep');
+	let forceInstall = args.has('force');
 	for pkgName in pkgNames.each() {
 		let pkgConfig = index.getPackageConfig(pkgName);
-		if !installer.installPackage(pkgConfig, args) { return false; }
+		if !installer.downloadAndInstallPackage(pkgConfig, 'manual', forceInstall, keepDownloads) {
+			return false;
+		}
 	}
 	return true;
 };
