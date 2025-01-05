@@ -17,7 +17,7 @@ args.add('keep', 'k').setHelp('Keep the intermediate files (downloads) when inst
 args.parse(feral.args);
 
 if args.getArgsCount() == 0 {
-	io.ecprintln('{r}Please provide the task to perform{0} - (b)uild|(i)nstall|re(m)ove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
+	io.ecprintln('{r}Please provide the task to perform{0} - (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
 	feral.exit(1);
 }
 
@@ -34,25 +34,16 @@ for arg in args.getArgs().each() {
 	pkgNames.push(arg);
 }
 
-if task == 'build' || task == 'b' {
+if task == 'install' || task == 'i' {
 	if pkgNames.empty() { pkgNames.push('.'); }
-	if !pkg.build(pkgNames[0], args) {
+	let localInstall = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+	if !pkg.install(pkgNames, args, localInstall) {
 		feral.exit(1);
 	}
-} elif task == 'install' || task == 'i' {
-	if pkgNames.empty() {
-		io.ecprintln('{r}Please provide a (list of) package(s) to install or \'.\' to build and install package in current directory');
-		feral.exit(1);
-	}
-	if !pkg.install(pkgNames, args) {
-		feral.exit(1);
-	}
-} elif task == 'remove' || task == 'm' {
-	if pkgNames.empty() {
-		io.ecprintln('{r}Please provide a (list of) package(s) to remove{0}');
-		feral.exit(1);
-	}
-	if !pkg.remove(pkgNames) {
+} elif task == 'remove' || task == 'r' {
+	if pkgNames.empty() { pkgNames.push('.'); }
+	let localRemove = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+	if !pkg.remove(pkgNames, args, localRemove) {
 		feral.exit(1);
 	}
 } elif task == 'update' || task == 'u' {

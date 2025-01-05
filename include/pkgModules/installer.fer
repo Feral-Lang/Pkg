@@ -16,13 +16,6 @@ if !fs.dirExists(installRootDir) {
 	fs.mkdir(installRootDir);
 }
 
-let loadConfig = fn() {
-	return core.loadConfig(core.rootConfigPath);
-};
-let writeConfig = fn(config) {
-	return core.writeConfig(core.rootConfigPath, config);
-};
-
 let getPkgDownloadPath = fn(pkgConfig) {
 	return fs.pathFrom(downloadDir, pkgConfig.name, pkgConfig.version);
 };
@@ -100,7 +93,7 @@ let downloadPackage = fn(pkgConfig, pkgDownloadPath) {
 # keepDownloads is here only to be passed to downloadAndInstallPackage
 let installPackage = fn(pkgConfig, pkgSourcePath, manualOrAuto = 'manual', forceInstall = false, keepDownloads = false) {
 	let pkgInstallPath = getPkgInstallPath(pkgConfig);
-	let config = loadConfig();
+	let config = core.loadConfig(core.rootConfigPath);
 	if forceInstall && fs.exists(pkgInstallPath) {
 		logging.trace('Package: ', pkgConfig.name, '[', pkgConfig.version, '] already installed, deleting...');
 		io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] was already installed, deleting...');
@@ -150,9 +143,24 @@ let installPackage = fn(pkgConfig, pkgSourcePath, manualOrAuto = 'manual', force
 		}
 	}
 	addPkgToConfig(config, pkgConfig, manualOrAuto);
-	writeConfig(config);
+	core.writeConfig(core.rootConfigPath, config);
 	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully!');
 	# Add pkgInstallPath to {feral.installPath}/lib/.modulePaths
 	feral.addGlobalModulePaths(pkgInstallPath);
 	return res;
+};
+
+let removePackage = fn(pkgConfig) {
+	let pkgInstallPath = getPkgInstallPath(pkgConfig);
+	let config = core.loadConfig(core.rootConfigPath);
+	if !fs.exists(pkgInstallPath) {
+		logging.trace('Package: ', pkgConfig.name, '[', pkgConfig.version, '] is not installed');
+		io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] is not installed');
+		return true;
+	}
+	removePkgFromConfig(config, pkgConfig);
+	core.writeConfig(core.rootConfigPath, config);
+	fs.remove(pkgInstallPath);
+	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] removed successfully!');
+	return true;
 };
