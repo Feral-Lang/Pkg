@@ -144,9 +144,9 @@ let installPackage = fn(pkgConfig, pkgSourcePath, manualOrAuto = 'manual', force
 	}
 	addPkgToConfig(config, pkgConfig, manualOrAuto);
 	core.writeConfig(core.rootConfigPath, config);
-	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully!');
 	# Add pkgInstallPath to {feral.installPath}/lib/.modulePaths
-	feral.addGlobalModulePaths(pkgInstallPath);
+	if manualOrAuto == 'manual' { feral.addGlobalModulePaths(pkgInstallPath); }
+	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] installed successfully!');
 	return res;
 };
 
@@ -161,6 +161,12 @@ let removePackage = fn(pkgConfig) {
 	removePkgFromConfig(config, pkgConfig);
 	core.writeConfig(core.rootConfigPath, config);
 	fs.remove(pkgInstallPath);
+	# Remove pkgInstallPath from {feral.installPath}/lib/.modulePaths
+	feral.removeGlobalModulePaths(pkgInstallPath);
 	io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] removed successfully!');
 	return true;
+};
+
+let upgradePackage = fn(pkgConfigOld, pkgConfigNew) {
+
 };
