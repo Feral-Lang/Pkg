@@ -66,14 +66,27 @@ let build = fn(pkgPath, args) {
 	return true;
 };
 
+let build = fn(pkgNames, args) {
+	let pkgPath = fs.absPath(pkgNames[0]);
+	let configPath = fs.pathFrom(pkgPath, 'package.fecl');
+	if !fs.exists(configPath) {
+		logging.fatal('Could not find a package.fecl config in path: ', pkgPath);
+		io.ecprintln('{r}Could not find a package.fecl config file in path: ', pkgPath);
+		return false;
+	}
+	let pkgConfig = core.loadConfig(configPath);
+	if !installer.buildPackage(pkgConfig, pkgPath) { return false; }
+	return true;
+};
+
 # If the package to be installed is in the current directory,
-# - localInstall will be true.
+# - localPkg will be true.
 # - pkgNames will be a list of strings, containing just one element: path
 # Else
-# - localInstall will be false
+# - localPkg will be false
 # - pkgNames will be a list of strings: names
-let install = fn(pkgNames, args, localInstall) {
-	if localInstall {
+let install = fn(pkgNames, args, localPkg) {
+	if localPkg {
 		let pkgPath = fs.absPath(pkgNames[0]);
 		let configPath = fs.pathFrom(pkgPath, 'package.fecl');
 		if !fs.exists(configPath) {
