@@ -17,7 +17,7 @@ let gitCmd = os.findExec('git.exe');
 let gitCmd = os.findExec('git');
 }
 
-if gitCmd.empty() {
+if gitCmd == nil {
 	raise('Could not find git in PATH. Cannot continue!');
 }
 

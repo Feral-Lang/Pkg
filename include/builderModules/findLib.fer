@@ -52,7 +52,11 @@ let addExtPrefixes in FindLib = fn(extPrefixes) {
 };
 
 # Adds a 'feral' prefix to the library name and adds feral.installPath + '/lib/feral ' to the prefixPath
-let makeFeralLib in FindLib = fn() { self.feralLib = true; return ref(self); };
+let makeFeralLib in FindLib = fn() {
+	self.libName = 'feral' + self.libName;
+	self.feralLib = true;
+	return ref(self);
+};
 
 let build in FindLib = fn() {
 	if !self.pathSuffixes.empty() { self.pathSuffixes = ' PATH_SUFFIXES "' + self.pathSuffixes + '"'; }
@@ -71,7 +75,6 @@ let build in FindLib = fn() {
 			# libferal.{dll,lib} are in the same folder as feral binary.
 			prefixPath += '"' + feral.installPath + '/bin" ';
 		}
-		self.libName = 'feral' + self.libName;
 	}
 	if prefixPath == ' PATHS ' {
 		prefixPath.clear();
