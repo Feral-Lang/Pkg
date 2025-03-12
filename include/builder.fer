@@ -103,8 +103,8 @@ let build in Builder = fn() {
 
 	let outLines = vec.new(refs = true);
 	if cmakeFileChanged {
-		logging.trace('Running cmake ...');
 		let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
+		logging.trace('Running cmake command: ', cmakeCmd, ' ...');
 		outLines.clear();
 		let res = os.exec(cmakeCmd, out = outLines);
 		for o in outLines.each() {
@@ -117,8 +117,8 @@ let build in Builder = fn() {
 		}
 	}
 
-	logging.trace('Running make ...');
 	let makeCmd = self.getMakeCmd();
+	logging.trace('Running make command: ', makeCmd, ' ...');
 	if makeCmd == nil {
 		logging.fatal('Failed to generate make command');
 		io.ecprintln('{r}Failed to generate make command!{0}');

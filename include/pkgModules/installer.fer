@@ -66,8 +66,9 @@ let downloadAndInstallPackage = fn(pkgConfig, manualOrAuto, forceInstall = false
 	if !downloadPackage(pkgConfig, pkgDownloadPath) { return false; }
 	if !installPackage(pkgConfig, pkgDownloadPath, manualOrAuto, forceInstall, keepDownloads) { return false; }
 	if !keepDownloads {
-		io.cprintln('Removing source directory ...');
 		fs.remove(pkgDownloadPath);
+	} else {
+		io.cprintln('Keeping source directory ...');
 	}
 	return true;
 };
