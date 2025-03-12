@@ -12,3 +12,5 @@ let pkgBinaryPath = './bin';
 let pkgBinaryInstallPath = './install/bin';
 let pkgDependencyPaths = vec.new();
 let task = 'build'; # or install or run
+
+let builder = nil; # Store the builder instance here

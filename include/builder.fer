@@ -20,10 +20,7 @@ let Builder = struct(
 );
 Builder.setTypeName('Builder');
 
-let builderInstance = Builder();
-builderInstance.deps.push(findLib.feralLib);
-
-let get = fn() { return ref(builderInstance); };
+let get = fn() { return ref(context.builder); };
 
 #############################################################################################################
 
@@ -40,6 +37,9 @@ let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDep
 	context.pkgBinaryInstallPath = fs.pathFrom(context.pkgInstallPath, 'bin');
 	context.pkgDependencyPaths = pkgDependencyPaths;
 	context.task = task;
+
+	let builder in context = Builder();
+	context.builder.deps.push(findLib.feralLib);
 };
 
 let build = fn() {
