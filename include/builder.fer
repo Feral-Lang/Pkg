@@ -76,26 +76,28 @@ let build in Builder = fn() {
 		libsStr += l.build() + '\n';
 	}
 
+	let cmakeFileChanged = false;
+
 	{
 		# this is inside a block as file must be closed before it is used in cmake command
 		let data = base.template.fmt();
 		let file = fs.fopen(fs.pathFrom(cmakeListsPath), 'w+');
 		io.fprintln(file, data);
+		cmakeFileChanged = true;
 	}
 
-	let cmakeFileChanged = false;
 	# forces cmake to always execute and ignore grep command on windows
-	if os.name == 'windows' && fs.exists(cmakeCachePath) {
+	if fs.dirExists(context.pkgBuildPath) && (cmakeFileChanged || os.name == 'windows') {
 		fs.remove(context.pkgBuildPath);
 	}
-	if !fs.exists(cmakeCachePath) {
+
+	if !fs.exists(context.pkgBuildPath) {
 		fs.mkdir(context.pkgBuildPath);
-		cmakeFileChanged = true;
-	} elif os.exec('grep', 'CMAKE_BUILD_TYPE', cmakeCachePath, '^|', 'grep', context.pkgBuildType, '^>/dev/null', '^2>&1') != 0 {
-		fs.remove(context.pkgBuildPath);
-		fs.mkdir(context.pkgBuildPath);
-		cmakeFileChanged = true;
 	}
+	# elif os.exec('grep', 'CMAKE_BUILD_TYPE', cmakeCachePath, '^|', 'grep', context.pkgBuildType, '^>/dev/null', '^2>&1') != 0 {
+	# 	fs.remove(context.pkgBuildPath);
+	# 	fs.mkdir(context.pkgBuildPath);
+	# }
 
 	let cwd = os.getCWD();
 	defer os.setCWD(cwd);

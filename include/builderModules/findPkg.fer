@@ -48,7 +48,7 @@ let getName in FindPackage = fn() {
 	if !self.targetName.empty() {
 		return self.targetName;
 	}
-	return self.pkgName.upper();
+	return '${' + self.pkgName.upper() + '_LIBRARIES}';
 };
 
 let addExtPrefixes in FindPackage = fn(extPrefixes...) {
@@ -59,7 +59,6 @@ let addExtPrefixes in FindPackage = fn(extPrefixes...) {
 };
 
 let build in FindPackage = fn() {
-	if self.targetName == '' { self.targetName = self.pkgName; }
 	if !self.pathSuffixes.empty() { self.pathSuffixes = ' PATH_SUFFIXES "' + self.pathSuffixes + '"'; }
 	let includeDirs = '';
 	let prefixPath = ' PATHS ';
