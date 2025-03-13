@@ -21,6 +21,8 @@ if args.getArgsCount() == 0 {
 	feral.exit(1);
 }
 
+if !fs.exists(feral.tempPath) { fs.mkdir(feral.tempPath); }
+
 let logFileName = fs.pathFrom(feral.tempPath, 'feralPkg.log');
 logging.addTargetByName(logFileName, logging.Levels.TRACE, false);
 io.println('Writing full logs to: ', logFileName);
