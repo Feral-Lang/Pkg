@@ -40,7 +40,9 @@ let addPathSuffixes in FindLib = fn(pathSuffixes...) {
 	return ref(self);
 };
 
-let getName in FindLib = fn() {
+let getName in FindLib = fn() { return self.libName; };
+
+let getLibName in FindLib = fn() {
 	return '${' + self.libName.upper() + '_LIBRARY}';
 };
 

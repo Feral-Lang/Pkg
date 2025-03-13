@@ -45,6 +45,10 @@ let addPathSuffixes in FindPackage = fn(pathSuffixes...) {
 };
 
 let getName in FindPackage = fn() {
+	return self.pkgName;
+};
+
+let getLibName in FindPackage = fn() {
 	if !self.targetName.empty() {
 		return self.targetName;
 	}
@@ -84,6 +88,20 @@ if vcpkg == nil {
 	raise('vcpkg is required for building on Windows');
 }
 let vcpkgBin = fs.pathFrom(vcpkg, 'vcpkg.exe');
+let checkVCPkgPackageInstalled in FindPackage = fn() {
+	let outLines = vec.new(refs = true);
+	if os.exec(vcpkgBin, 'list', self.pkgName, '^2>&1', out = outLines) != 0 {
+		raise('Failed to list package info using vcpkg. Are you sure vcpkg is installed?');
+	}
+	let found = false;
+	let searchStr = self.pkgName.lower() + ':';
+	for line in outLines.each() {
+		if line.find(searchStr) < 0 { continue; }
+		found = true;
+		break;
+	}
+	return found;
+};
 let getVCPkgDependenceList in FindPackage = fn() {
 	let outLines = vec.new(refs = true);
 	if os.exec(vcpkgBin, '--triplet', 'x64-windows', 'depend-info', self.pkgName, '^2>&1', out = outLines) != 0 {

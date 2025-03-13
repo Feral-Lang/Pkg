@@ -54,6 +54,9 @@ let new = fn(name, srcs...) {
 	return AddLibrary(libName = name).addSources(srcs...);
 };
 
+let getName in AddLibrary = fn() { return self.getLibName(); };
+let getLibName in AddLibrary = fn() { return self.libName; };
+
 let addSources in AddLibrary = fn(srcs...) {
 	for src in srcs.each() {
 		self.sources += ' ${PROJECT_SOURCE_DIR}/src/';
@@ -73,8 +76,11 @@ let build in AddLibrary = fn() {
 	let depNames = '';
 	let pkgDLLRegexes = ' ';
 	for d in self.deps.each() {
-		depNames += ' ' + d.getName();
+		depNames += ' ' + d.getLibName();
 		if os.name == 'windows' && d._typestr_() == 'FindPackage' {
+			if !d.checkVCPkgPackageInstalled() {
+				raise('The library: ', d.getName(), ' isn\'t installed. Please use vcpkg to install it');
+			}
 			let depList = d.getVCPkgDependenceList();
 			for dep in depList.each() {
 				pkgDLLRegexes += '".*' + dep + '.*" ';
@@ -87,8 +93,4 @@ let build in AddLibrary = fn() {
 		libDLLInstall = libDLLInstallBase.fmt();
 	}
 	return addLibBase.fmt();
-};
-
-let getName in AddLibrary = fn() {
-	return self.libName;
 };
