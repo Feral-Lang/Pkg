@@ -9,8 +9,7 @@ let logging = import('std/logging');
 let base = import('./builderModules/base');
 let addLib = import('./builderModules/addLib');
 let context = import('./builderModules/context');
-let findLib = import('./builderModules/findLib');
-let findPkg = import('./builderModules/findPkg');
+let findModule = import('./builderModules/findModule');
 
 #############################################################################################################
 
@@ -19,6 +18,12 @@ let Builder = struct(
 	libs = vec.new(refs = true)
 );
 Builder.setTypeName('Builder');
+
+let newBuilder = fn() {
+	let b = Builder();
+	b.deps.push(findModule.feralLib);
+	return b;
+};
 
 let get = fn() { return ref(context.builder); };
 
@@ -38,8 +43,7 @@ let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDep
 	context.pkgDependencyPaths = pkgDependencyPaths;
 	context.task = task;
 
-	let builder in context = Builder();
-	context.builder.deps.push(findLib.feralLib);
+	let builder in context = newBuilder();
 };
 
 let build = fn() {
@@ -151,20 +155,20 @@ let build in Builder = fn() {
 };
 
 let findLibrary in Builder = fn(name) {
-	let lib = findLib.new(name);
+	let lib = findModule.new(name, false);
 	self.deps.push(lib);
 	return ref(lib);
 };
 
-let addSystemLibrary in Builder = fn(name) {
-	let pkg = findPkg.new(name);
+let findPackage in Builder = fn(name) {
+	let pkg = findModule.new(name, true);
 	self.deps.push(pkg);
 	return ref(pkg);
 };
 
 let addLibrary in Builder = fn(name, srcs...) {
 	let lib = addLib.new(name, srcs...);
-	lib.dependsOn(findLib.feralLib);
+	lib.dependsOn(findModule.feralLib);
 	self.libs.push(lib);
 	return ref(lib);
 };

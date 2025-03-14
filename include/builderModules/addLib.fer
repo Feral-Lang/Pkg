@@ -30,7 +30,7 @@ install(TARGETS $\\{mod}
 )
 {libDLLInstall}`;
 
-# for FindPkg dependencies
+# for FindModule (package) dependencies
 let libDLLInstallBase =
 `install(RUNTIME_DEPENDENCY_SET RTDS_LIB_$\\{mod}
 	PRE_INCLUDE_REGEXES
@@ -55,7 +55,7 @@ let new = fn(name, srcs...) {
 };
 
 let getName in AddLibrary = fn() { return self.getLibName(); };
-let getLibName in AddLibrary = fn() { return self.libName; };
+let getTargetString in AddLibrary = fn() { return self.libName; };
 
 let addSources in AddLibrary = fn(srcs...) {
 	for src in srcs.each() {
@@ -76,10 +76,10 @@ let build in AddLibrary = fn() {
 	let depNames = '';
 	let pkgDLLRegexes = ' ';
 	for d in self.deps.each() {
-		depNames += ' ' + d.getLibName();
-		if os.name == 'windows' && d._typestr_() == 'FindPackage' {
+		depNames += ' ' + d.getTargetString();
+		if os.name == 'windows' && d._typestr_() == 'FindModule' && d.isPackage() {
 			if !d.checkVCPkgPackageInstalled() {
-				raise('The library: ', d.getName(), ' isn\'t installed. Please use vcpkg to install it');
+				raise('The package: ', d.getName(), ' isn\'t installed. Please use vcpkg to install it');
 			}
 			let depList = d.getVCPkgDependenceList();
 			for dep in depList.each() {

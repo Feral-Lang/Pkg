@@ -1,0 +1,158 @@
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+
+let context = import('./context');
+
+let findLibraryBase =
+`if(NOT "{hasIncludeDirs}" MATCHES "")
+	include_directories({self.includeDirs})
+endif()
+find_library({self.targetLinkVar} $\\{WIN_LIB_PREFIX}{self.libName}{self.pathSuffixes}{self.required}{self.searchPaths})
+if({self.targetLinkVar})
+	message("-- Found library {self.name}; Will be linked as: {self.getTargetString()}")
+endif()
+`;
+let findPackageBase =
+`if(NOT "{hasIncludeDirs}" MATCHES "")
+	include_directories({self.includeDirs})
+endif()
+find_package({self.name} {self.pathSuffixes}{self.required}{self.searchPaths})
+if({self.name}_FOUND)
+	message("-- Found package {self.name}; Will be linked as: {self.getTargetString()}")
+endif()
+`;
+
+let FindModule = struct(
+	template = findLibraryBase,
+	libOrPkg = false,
+	name = 'test',
+	libName = '',
+	targetIncludePath = '',
+	targetIncludeVar = '',
+	targetLinkName = '', # Takes precedence over linkTarget* variables
+	targetLinkPath = '', # Lowest precedence
+	targetLinkVar = '', # Takes precedence over linkTargetPath
+	required = ' REQUIRED',
+	includeDirs = '',
+	searchPaths = ' PATHS ', # for find_library/find_package
+	pathSuffixes = '' # for find_library/find_package
+);
+FindModule.setTypeName('FindModule');
+
+# lib => libOrPkg = false
+# pkg => libOrPkg = true
+let new = fn(name, libOrPkg) {
+	let findModule = FindModule(libOrPkg = libOrPkg, name = name);
+	if libOrPkg {
+		# if package
+		findModule.template = findPackageBase;
+		findModule.targetLinkVar = findModule.name.upper() + '_LIBRARIES';
+	} else {
+		# if library (template already set in FindModule struct definition)
+		findModule.libName = findModule.name;
+		findModule.targetLinkVar = findModule.name.upper() + '_LIBRARY';
+	}
+	return findModule;
+};
+
+let isPackage in FindModule = fn() { return self.libOrPkg; };
+
+let setLibName in FindModule = fn(libName) { self.libName = libName; return ref(self); };
+let setTargetIncludePath in FindModule = fn(includePath) { self.targetIncludePath = includePath; return ref(self); };
+let setTargetIncludeVar in FindModule = fn(includeVar) { self.targetIncludeVar = includeVar; return ref(self); };
+let setTargetLinkName in FindModule = fn(targetLinkName) { self.targetLinkName = targetLinkName; return ref(self); };
+let setTargetLinkPath in FindModule = fn(linkPath) { self.targetLinkPath = linkPath; return ref(self); };
+let setTargetLinkVar in FindModule = fn(linkVar) { self.targetLinkVar = linkVar; return ref(self); };
+
+let getName in FindModule = fn() { return self.name; };
+
+let getTargetString in FindModule = fn() {
+	if !self.targetLinkName.empty() { return self.targetLinkName; }
+	if !self.targetLinkVar.empty() { return '${' + self.targetLinkVar + '}'; }
+	if !self.targetLinkPath.empty() { return self.targetLinkPath; }
+	return '${' + self.name + '}';
+};
+
+let makeOptional in FindModule = fn() {
+	self.required = '';
+	self.template = findModuleBase;
+	return ref(self);
+};
+
+let addSearchPath in FindModule = fn(path, suffix = '') {
+	self.includeDirs += '"' + path + '/include';
+	if !suffix.empty() { self.includeDirs += '/' + suffix; }
+	self.includeDirs += '" ';
+	self.searchPaths += '"' + path + '/lib';
+	if !suffix.empty() { self.searchPaths += '/' + suffix; }
+	self.searchPaths += '" ';
+	if os.name == 'windows' {
+		self.searchPaths += '"' + path + '/bin" ';
+	}
+	return ref(self);
+};
+
+let addPathSuffixes in FindModule = fn(pathSuffixes...) {
+	for pathSuffix in pathSuffixes.each() {
+		self.pathSuffixes += ' "' + pathSuffix + '"';
+	}
+	return ref(self);
+};
+
+let build in FindModule = fn() {
+	let findFunctionName = 'find_library';
+	if self.libOrPkg { findFunctionName = 'find_package'; }
+	if !self.pathSuffixes.empty() {
+		self.pathSuffixes = ' PATH_SUFFIXES' + self.pathSuffixes;
+	}
+	let hasIncludeDirs = '';
+	if !self.includeDirs.empty() {
+		hasIncludeDirs = 'INCLUDE_DIRS_ARE_PRESENT';
+	}
+	if self.searchPaths == ' PATHS ' {
+		self.searchPaths.clear();
+	} elif !self.searchPaths.endsWith('NO_DEFAULT_PATH') {
+		self.searchPaths += ' NO_DEFAULT_PATH';
+	}
+	return self.template.fmt();
+};
+
+inline if os.name == 'windows' {
+let vcpkg = os.getEnv('VCPKG_ROOT');
+if vcpkg == nil {
+	raise('vcpkg is required for building on Windows');
+}
+let vcpkgBin = fs.pathFrom(vcpkg, 'vcpkg.exe');
+let checkVCPkgPackageInstalled in FindModule = fn() {
+	let outLines = vec.new(refs = true);
+	if os.exec(vcpkgBin, 'list', self.name, '^2>&1', out = outLines) != 0 {
+		raise('Failed to list package info using vcpkg. Are you sure vcpkg is installed?');
+	}
+	let found = false;
+	let searchStr = self.name.lower() + ':';
+	for line in outLines.each() {
+		if line.find(searchStr) < 0 { continue; }
+		found = true;
+		break;
+	}
+	return found;
+};
+let getVCPkgDependenceList in FindModule = fn() {
+	let outLines = vec.new(refs = true);
+	if os.exec(vcpkgBin, '--triplet', 'x64-windows', 'depend-info', self.name, '^2>&1', out = outLines) != 0 {
+		raise('Failed to get vcpkg dependence info for pkg: ', self.name);
+	}
+	let list = vec.new(refs = true);
+	for line in outLines.each() {
+		let lsplit = line.split('[:');
+		if lsplit.empty() { continue; }
+		if lsplit[0].find('vcpkg') >= 0 { continue; }
+		list.push(lsplit[0]);
+	}
+	return list;
+};
+}
+
+let feralLib = new('feral', false);
+feralLib.addSearchPath(feral.installPath, 'feral');
