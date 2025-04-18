@@ -100,13 +100,15 @@ let installPackage = fn(pkgConfig, pkgSourcePath, manualOrAuto = 'manual', force
 	let config = core.loadConfig(core.rootConfigPath);
 	let pkgInstallPath = getPkgInstallPath(pkgConfig);
 	if !buildOnly {
-		if forceInstall && fs.exists(pkgInstallPath) {
+		let pkgInstalled = isPkgInstalled(config, pkgConfig);
+		if forceInstall && pkgInstalled {
 			logging.trace('Package: ', pkgConfig.name, '[', pkgConfig.version, '] already installed, deleting...');
 			io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] was already installed, deleting...');
 			removePkgFromConfig(config, pkgConfig);
-			fs.remove(pkgInstallPath);
+			if fs.exists(pkgInstallPath) { fs.remove(pkgInstallPath); }
+			pkgInstalled = false;
 		}
-		if isPkgInstalled(config, pkgConfig) {
+		if pkgInstalled {
 			logging.trace('Package: ', pkgConfig.name, '[', pkgConfig.version, '] already installed!');
 			io.cprintln('Package: {y}', pkgConfig.name, '{0}[{c}', pkgConfig.version, '{0}] already installed!');
 			return true;
