@@ -9,14 +9,15 @@ let argparse = import('std/argparse');
 
 let pkg = import('pkg/pkg');
 
-let args = argparse.new();
-args.add('version', 'v').setHelp('Display program version');
-args.add('help', 'h').setHelp('Display this program help');
-args.add('force', 'f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
-args.add('keep', 'k').setHelp('Keep the intermediate files (downloads) when installing packages');
-args.parse(feral.args);
+let args = argparse.new(feral.args);
+args.addArg('version').addOpts('--version', '-v').setHelp('Display program version');
+args.addArg('force').addOpts('--force', '-f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
+args.addArg('keep').addOpts('--keep', '-k').setHelp('Keep the intermediate files (downloads) when installing packages');
+args.addArg('task').setValReqd(true).setHelp('Task to perform. One of (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
+args.setLastArg('task');
+args.parse();
 
-if args.getArgsCount() == 0 {
+if !args.has('task') {
 	io.ecprintln('{r}Please provide the task to perform{0} - (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
 	feral.exit(1);
 }
@@ -29,10 +30,10 @@ io.println('Writing full logs to: ', logFileName);
 
 pkg.init();
 
-let task = args.popArg();
+let task = args.getValue('task');
 
 let pkgNames = vec.new(refs = true);
-for arg in args.getArgs().each() {
+for arg in args.getPassthrough().each() {
 	pkgNames.push(arg);
 }
 

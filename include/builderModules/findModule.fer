@@ -155,4 +155,4 @@ let getVCPkgDependenceList in FindModule = fn() {
 }
 
 let feralLib = new('feral', false);
-feralLib.addSearchPath(feral.installPath, 'feral');
+feralLib.addSearchPath(feral.installPath);
