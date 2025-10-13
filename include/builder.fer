@@ -3,7 +3,7 @@ let fs = import('std/fs');
 let os = import('std/os');
 let map = import('std/map');
 let vec = import('std/vec');
-let mproc = import('std/multiproc');
+let thread = import('std/thread');
 let logging = import('std/logging');
 
 let base = import('./builderModules/base');
@@ -195,7 +195,7 @@ let getCMakeCmd in Builder = fn(cmakeListsPath) {
 let getMakeCmd in Builder = fn() {
 	let cmd = vec.new(refs = true);
 	# No need to do the whole msbuild charade when cmake has a lovely --build option!
-	cmd.push('cmake', '--build', '.', '-j' + mproc.getConcurrency().str());
+	cmd.push('cmake', '--build', '.', '-j' + thread.getConcurrency().str());
 	if os.name == 'windows' {
 		cmd.push('--config', context.pkgBuildType);
 	}
