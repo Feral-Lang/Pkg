@@ -14,15 +14,15 @@ let findModule = import('./builderModules/findModule');
 #############################################################################################################
 
 let Builder = struct(
-	deps = vec.new(refs = true),
-	libs = vec.new(refs = true)
+    deps = vec.new(refs = true),
+    libs = vec.new(refs = true)
 );
 Builder.setTypeName('Builder');
 
 let newBuilder = fn() {
-	let b = Builder();
-	b.deps.push(findModule.feralLib);
-	return b;
+    let b = Builder();
+    b.deps.push(findModule.feralLib);
+    return b;
 };
 
 let get = fn() { return ref(context.builder); };
@@ -32,145 +32,145 @@ let get = fn() { return ref(context.builder); };
 # These functions are used by pkg - for project setup.
 
 let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDependencyPaths, task) {
-	context.pkgName = pkgName;
-	context.pkgNameLower = pkgName.lower();
-	context.pkgVersion = pkgVersion;
-	context.pkgSourcePath = pkgSourcePath; # Must have full path
-	context.pkgInstallPath = pkgInstallPath;
-	context.pkgBuildPath = fs.pathFrom(context.pkgSourcePath, 'build');
-	context.pkgBinaryPath = fs.pathFrom(context.pkgSourcePath, 'bin');
-	context.pkgBinaryInstallPath = fs.pathFrom(context.pkgInstallPath, 'bin');
-	context.pkgDependencyPaths = pkgDependencyPaths;
-	context.task = task;
+    context.pkgName = pkgName;
+    context.pkgNameLower = pkgName.lower();
+    context.pkgVersion = pkgVersion;
+    context.pkgSourcePath = pkgSourcePath; # Must have full path
+    context.pkgInstallPath = pkgInstallPath;
+    context.pkgBuildPath = fs.pathFrom(context.pkgSourcePath, 'build');
+    context.pkgBinaryPath = fs.pathFrom(context.pkgSourcePath, 'bin');
+    context.pkgBinaryInstallPath = fs.pathFrom(context.pkgInstallPath, 'bin');
+    context.pkgDependencyPaths = pkgDependencyPaths;
+    context.task = task;
 
-	let builder in context = newBuilder();
+    let builder in context = newBuilder();
 };
 
 let build = fn() {
-	let ehWhatever = import(fs.pathFrom(context.pkgSourcePath, 'build')) or e {
-		io.ecprintln('{r}Unable to import build script of the package:{0} ', e);
-		return nil;
-	};
-	if ehWhatever == nil { return false; }
-	if !get().build() {
-		io.ecprintln('{r}Builder for package: ', context.pkgName, ' failed!{0}');
-		return false;
-	}
-	return true;
+    let ehWhatever = import(fs.pathFrom(context.pkgSourcePath, 'build')) or e {
+        io.ecprintln('{r}Unable to import build script of the package:{0} ', e);
+        return nil;
+    };
+    if ehWhatever == nil { return false; }
+    if !get().build() {
+        io.ecprintln('{r}Builder for package: ', context.pkgName, ' failed!{0}');
+        return false;
+    }
+    return true;
 };
 
 let run = fn(source) {
-	let envMap = map.new(refs = true);
-	envMap.insert('FERAL_PATHS', context.pkgDependencyPaths.join(os.envDelimiter));
-	os.exec(feral.binaryPath, fs.pathFrom(context.pkgSourcePath, source + '.fer', env = envMap));
+    let envMap = map.new(refs = true);
+    envMap.insert('FERAL_PATHS', context.pkgDependencyPaths.join(os.envDelimiter));
+    os.exec(feral.binaryPath, fs.pathFrom(context.pkgSourcePath, source + '.fer', env = envMap));
 };
 
 #############################################################################################################
 
 let build in Builder = fn() {
-	let cmakeListsPath = fs.pathFrom(context.pkgSourcePath, 'CMakeLists.txt');
-	let cmakeCachePath = fs.pathFrom(context.pkgBuildPath, 'CMakeCache.txt');
+    let cmakeListsPath = fs.pathFrom(context.pkgSourcePath, 'CMakeLists.txt');
+    let cmakeCachePath = fs.pathFrom(context.pkgBuildPath, 'CMakeCache.txt');
 
-	let depsStr = '';
-	for d in self.deps.each() {
-		depsStr += d.build() + '\n';
-	}
-	let libsStr = '';
-	for l in self.libs.each() {
-		libsStr += l.build() + '\n';
-	}
+    let depsStr = '';
+    for d in self.deps.each() {
+        depsStr += d.build() + '\n';
+    }
+    let libsStr = '';
+    for l in self.libs.each() {
+        libsStr += l.build() + '\n';
+    }
 
-	let cmakeFileChanged = false;
+    let cmakeFileChanged = false;
 
-	{
-		# this is inside a block as file must be closed before it is used in cmake command
-		let data = base.template.fmt();
-		let file = fs.fopen(fs.pathFrom(cmakeListsPath), 'w+');
-		io.fprintln(file, data);
-		cmakeFileChanged = true;
-	}
+    {
+        # this is inside a block as file must be closed before it is used in cmake command
+        let data = base.template.fmt();
+        let file = fs.fopen(fs.pathFrom(cmakeListsPath), 'w+');
+        io.fprintln(file, data);
+        cmakeFileChanged = true;
+    }
 
-	# forces cmake to always execute and ignore grep command on windows
-	if fs.dirExists(context.pkgBuildPath) && (cmakeFileChanged || os.name == 'windows') {
-		fs.remove(context.pkgBuildPath);
-	}
+    # forces cmake to always execute and ignore grep command on windows
+    if fs.dirExists(context.pkgBuildPath) && (cmakeFileChanged || os.name == 'windows') {
+        fs.remove(context.pkgBuildPath);
+    }
 
-	if !fs.exists(context.pkgBuildPath) {
-		fs.mkdir(context.pkgBuildPath);
-	}
-	# elif os.exec('grep', 'CMAKE_BUILD_TYPE', cmakeCachePath, '^|', 'grep', context.pkgBuildType, '^>/dev/null', '^2>&1') != 0 {
-	# 	fs.remove(context.pkgBuildPath);
-	# 	fs.mkdir(context.pkgBuildPath);
-	# }
+    if !fs.exists(context.pkgBuildPath) {
+        fs.mkdir(context.pkgBuildPath);
+    }
+    # elif os.exec('grep', 'CMAKE_BUILD_TYPE', cmakeCachePath, '^|', 'grep', context.pkgBuildType, '^>/dev/null', '^2>&1') != 0 {
+    #     fs.remove(context.pkgBuildPath);
+    #     fs.mkdir(context.pkgBuildPath);
+    # }
 
-	let cwd = os.getCWD();
-	defer os.setCWD(cwd);
-	os.setCWD(context.pkgBuildPath);
+    let cwd = os.getCWD();
+    defer os.setCWD(cwd);
+    os.setCWD(context.pkgBuildPath);
 
-	let outLines = vec.new(refs = true);
-	if cmakeFileChanged {
-		let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
-		logging.trace('Running cmake command: ', cmakeCmd, ' ...');
-		outLines.clear();
-		let res = os.exec(cmakeCmd, out = outLines);
-		for o in outLines.each() {
-			logging.info('-- ', o);
-		}
-		if res != 0 {
-			logging.fatal('Failed to execute cmake!');
-			io.ecprintln('{r}Failed to execute cmake!{0}');
-			return false;
-		}
-	}
+    let outLines = vec.new(refs = true);
+    if cmakeFileChanged {
+        let cmakeCmd = self.getCMakeCmd(cmakeListsPath);
+        logging.trace('Running cmake command: ', cmakeCmd, ' ...');
+        outLines.clear();
+        let res = os.exec(cmakeCmd, out = outLines);
+        for o in outLines.each() {
+            logging.info('-- ', o);
+        }
+        if res != 0 {
+            logging.fatal('Failed to execute cmake!');
+            io.ecprintln('{r}Failed to execute cmake!{0}');
+            return false;
+        }
+    }
 
-	let makeCmd = self.getMakeCmd();
-	logging.trace('Running make command: ', makeCmd, ' ...');
-	if makeCmd == nil {
-		logging.fatal('Failed to generate make command');
-		io.ecprintln('{r}Failed to generate make command!{0}');
-		return false;
-	}
-	outLines.clear();
-	let res = os.exec(makeCmd, out = outLines);
-	for o in outLines.each() {
-		logging.info('-- ', o);
-	}
-	if res != 0 {
-		logging.fatal('Failed to execute make!');
-		io.ecprintln('{r}Failed to execute make!{0}');
-		return false;
-	}
+    let makeCmd = self.getMakeCmd();
+    logging.trace('Running make command: ', makeCmd, ' ...');
+    if makeCmd == nil {
+        logging.fatal('Failed to generate make command');
+        io.ecprintln('{r}Failed to generate make command!{0}');
+        return false;
+    }
+    outLines.clear();
+    let res = os.exec(makeCmd, out = outLines);
+    for o in outLines.each() {
+        logging.info('-- ', o);
+    }
+    if res != 0 {
+        logging.fatal('Failed to execute make!');
+        io.ecprintln('{r}Failed to execute make!{0}');
+        return false;
+    }
 
-	if context.task != 'install' { return true; }
-	if fs.exists(context.pkgBinaryInstallPath) {
-		let files = fs.walkDir(context.pkgBinaryInstallPath);
-		for src in files.each() {
-			let dest = fs.pathFrom(feral.installPath, 'bin', fs.fmtWithPath('$f', src));
-			fs.mklink(src, dest);
-			logging.info('Installed binary (created symlink): ', dest, ' -> ', src);
-			io.cprintln('Installed binary: {g}', dest, '{0} -> {g}', src, '{0}');
-		}
-	}
-	return true;
+    if context.task != 'install' { return true; }
+    if fs.exists(context.pkgBinaryInstallPath) {
+        let files = fs.walkDir(context.pkgBinaryInstallPath);
+        for src in files.each() {
+            let dest = fs.pathFrom(feral.installPath, 'bin', fs.fmtWithPath('$f', src));
+            fs.mklink(src, dest);
+            logging.info('Installed binary (created symlink): ', dest, ' -> ', src);
+            io.cprintln('Installed binary: {g}', dest, '{0} -> {g}', src, '{0}');
+        }
+    }
+    return true;
 };
 
 let findLibrary in Builder = fn(name) {
-	let lib = findModule.new(name, false);
-	self.deps.push(lib);
-	return ref(lib);
+    let lib = findModule.new(name, false);
+    self.deps.push(lib);
+    return ref(lib);
 };
 
 let findPackage in Builder = fn(name) {
-	let pkg = findModule.new(name, true);
-	self.deps.push(pkg);
-	return ref(pkg);
+    let pkg = findModule.new(name, true);
+    self.deps.push(pkg);
+    return ref(pkg);
 };
 
 let addLibrary in Builder = fn(name, srcs...) {
-	let lib = addLib.new(name, srcs...);
-	lib.dependsOn(findModule.feralLib);
-	self.libs.push(lib);
-	return ref(lib);
+    let lib = addLib.new(name, srcs...);
+    lib.dependsOn(findModule.feralLib);
+    self.libs.push(lib);
+    return ref(lib);
 };
 
 let addRPath in Builder = fn(rpath) { self.installRPaths += ';' + rpath; return ref(self); };
@@ -180,28 +180,28 @@ let setRelativeRPath in Builder = fn(rpathFromOrigin) { self.rpathFromOrigin = r
 let setPrefix in Builder = fn(prefix) { self.prefix = prefix; return ref(self); };
 
 let getCMakeCmd in Builder = fn(cmakeListsPath) {
-	let cmd = vec.new(refs = true, 'cmake', cmakeListsPath, '--no-warn-unused-cli',
-			  '-DDISABLE_INSTALL_MSG=true', '-DCMAKE_EXPORT_COMPILE_COMMANDS=true');
-	if os.name == 'windows' {
-		cmd.push('-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=true');
-	} else {
-		# no need for CMAKE_BUILD_TYPE on Windows because it's taken care of by the make step.
-		cmd.push('-DCMAKE_BUILD_TYPE=' + context.pkgBuildType);
-	}
-	cmd.push('^2>&1');
-	return cmd;
+    let cmd = vec.new(refs = true, 'cmake', cmakeListsPath, '--no-warn-unused-cli',
+              '-DDISABLE_INSTALL_MSG=true', '-DCMAKE_EXPORT_COMPILE_COMMANDS=true');
+    if os.name == 'windows' {
+        cmd.push('-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=true');
+    } else {
+        # no need for CMAKE_BUILD_TYPE on Windows because it's taken care of by the make step.
+        cmd.push('-DCMAKE_BUILD_TYPE=' + context.pkgBuildType);
+    }
+    cmd.push('^2>&1');
+    return cmd;
 };
 
 let getMakeCmd in Builder = fn() {
-	let cmd = vec.new(refs = true);
-	# No need to do the whole msbuild charade when cmake has a lovely --build option!
-	cmd.push('cmake', '--build', '.', '-j' + thread.getConcurrency().str());
-	if os.name == 'windows' {
-		cmd.push('--config', context.pkgBuildType);
-	}
-	if context.task == 'install' {
-		cmd.push('--target', context.task);
-	}
-	cmd.push('^2>&1');
-	return cmd;
+    let cmd = vec.new(refs = true);
+    # No need to do the whole msbuild charade when cmake has a lovely --build option!
+    cmd.push('cmake', '--build', '.', '-j' + thread.getConcurrency().str());
+    if os.name == 'windows' {
+        cmd.push('--config', context.pkgBuildType);
+    }
+    if context.task == 'install' {
+        cmd.push('--target', context.task);
+    }
+    cmd.push('^2>&1');
+    return cmd;
 };

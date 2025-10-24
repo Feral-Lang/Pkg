@@ -18,8 +18,8 @@ args.setLastArg('task');
 args.parse();
 
 if !args.has('task') {
-	io.ecprintln('{r}Please provide the task to perform{0} - (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
-	feral.exit(1);
+    io.ecprintln('{r}Please provide the task to perform{0} - (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
+    feral.exit(1);
 }
 
 if !fs.exists(feral.tempPath) { fs.mkdir(feral.tempPath); }
@@ -34,53 +34,53 @@ let task = args.getValue('task');
 
 let pkgNames = vec.new(refs = true);
 for arg in args.getPassthrough().each() {
-	pkgNames.push(arg);
+    pkgNames.push(arg);
 }
 
 if task == 'install' || task == 'i' {
-	if pkgNames.empty() { pkgNames.push('.'); }
-	let localPkg = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
-	if !pkg.install(pkgNames, args, localPkg) {
-		feral.exit(1);
-	}
+    if pkgNames.empty() { pkgNames.push('.'); }
+    let localPkg = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+    if !pkg.install(pkgNames, args, localPkg) {
+        feral.exit(1);
+    }
 } elif task == 'remove' || task == 'r' {
-	if pkgNames.empty() { pkgNames.push('.'); }
-	let localPkg = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
-	if !pkg.remove(pkgNames, args, localPkg) {
-		feral.exit(1);
-	}
+    if pkgNames.empty() { pkgNames.push('.'); }
+    let localPkg = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+    if !pkg.remove(pkgNames, args, localPkg) {
+        feral.exit(1);
+    }
 } elif task == 'build' || task == 'b' {
-	if pkgNames.empty() { pkgNames.push('.'); }
-	let pkgFileExists = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
-	if !pkgFileExists {
-		io.ecprintln('{r}No package exists at path{0}:', pkgNames[0]);
-		feral.exit(1);
-	}
-	if !pkg.build(pkgNames, args) {
-		feral.exit(1);
-	}
+    if pkgNames.empty() { pkgNames.push('.'); }
+    let pkgFileExists = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+    if !pkgFileExists {
+        io.ecprintln('{r}No package exists at path{0}:', pkgNames[0]);
+        feral.exit(1);
+    }
+    if !pkg.build(pkgNames, args) {
+        feral.exit(1);
+    }
 } elif task == 'update' || task == 'u' {
-	if !pkg.update() {
-		feral.exit(1);
-	}
+    if !pkg.update() {
+        feral.exit(1);
+    }
 } elif task == 'upgrade' || task == 'g' {
-	# optionally takes pkgNames and upgrades only those packages.
-	if !pkg.upgrade(pkgNames) {
-		feral.exit(1);
-	}
+    # optionally takes pkgNames and upgrades only those packages.
+    if !pkg.upgrade(pkgNames) {
+        feral.exit(1);
+    }
 } elif task == 'info' || task == 'n' {
-	if pkgNames.empty() {
-		io.ecprintln('{r}Please provide a (list of) package(s) to fetch info for{0}');
-		feral.exit(1);
-	}
-	if !pkg.info(pkgNames) {
-		feral.exit(1);
-	}
+    if pkgNames.empty() {
+        io.ecprintln('{r}Please provide a (list of) package(s) to fetch info for{0}');
+        feral.exit(1);
+    }
+    if !pkg.info(pkgNames) {
+        feral.exit(1);
+    }
 } elif task == 'list' || task == 'l' {
-	# optionally takes pkgNames and searches in the list for package names that contain one of the pkgNames.
-	if !pkg.list(pkgNames) {
-		feral.exit(1);
-	}
+    # optionally takes pkgNames and searches in the list for package names that contain one of the pkgNames.
+    if !pkg.list(pkgNames) {
+        feral.exit(1);
+    }
 } else {
-	io.eprintln('[ERROR] Invalid task: ', task, ' provided');
+    io.eprintln('[ERROR] Invalid task: ', task, ' provided');
 }
