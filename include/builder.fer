@@ -145,7 +145,7 @@ let build in Builder = fn() {
     if fs.exists(context.pkgBinaryInstallPath) {
         let files = fs.walkDir(context.pkgBinaryInstallPath);
         for src in files.each() {
-            let dest = fs.pathFrom(feral.installPath, 'bin', fs.fmtWithPath('$f', src));
+            let dest = fs.pathFrom(feral.libPath, 'bin', fs.fmtWithPath('$f', src));
             fs.mklink(src, dest);
             logging.info('Installed binary (created symlink): ', dest, ' -> ', src);
             io.cprintln('Installed binary: {g}', dest, '{0} -> {g}', src, '{0}');

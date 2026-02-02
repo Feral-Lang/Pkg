@@ -73,7 +73,7 @@ let build in AddLibrary = fn() {
     let pkgDLLRegexes = ' ';
     for d in self.deps.each() {
         depNames += ' ' + d.getTargetString();
-        if os.name == 'windows' && d._typestr_() == 'FindModule' && d.isPackage() {
+        if os.name == 'windows' && d._typeName_() == 'FindModule' && d.isPackage() {
             if !d.checkVCPkgPackageInstalled() {
                 raise('The package: ', d.getName(), ' isn\'t installed. Please use vcpkg to install it');
             }
