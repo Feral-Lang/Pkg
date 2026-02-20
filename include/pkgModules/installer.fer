@@ -9,19 +9,19 @@ let core = import('./core');
 let index = import('./index');
 let builder = import('../builder');
 
-let installRootDir = fs.pathFrom(core.rootDir, 'installed');
-let downloadDir = fs.pathFrom(core.rootDir, 'downloads');
+let installRootDir = core.rootDir / 'installed';
+let downloadDir = core.rootDir / 'downloads';
 
-if !fs.dirExists(installRootDir) {
+if !fs.exists(installRootDir) {
     fs.mkdir(installRootDir);
 }
 
 let getPkgDownloadPath = fn(pkgConfig) {
-    return fs.pathFrom(downloadDir, pkgConfig.name, pkgConfig.version);
+    return downloadDir / pkgConfig.name / pkgConfig.version;
 };
 
 let getPkgInstallPath = fn(pkgConfig) {
-    return fs.pathFrom(installRootDir, pkgConfig.name, pkgConfig.version);
+    return installRootDir / pkgConfig.name / pkgConfig.version;
 };
 
 let isPkgInstalled = fn(config, pkgConfig) {
@@ -62,7 +62,7 @@ let removePkgFromConfig = fn(config, pkgConfig) {
 
 let downloadAndInstallPackage = fn(pkgConfig, manualOrAuto, forceInstall = false, keepDownloads = false) {
     let pkgInstallPath = getPkgInstallPath(pkgConfig);
-    let pkgDownloadPath = '';
+    let pkgDownloadPath = ''.path();
     if !downloadPackage(pkgConfig, pkgDownloadPath) { return false; }
     if !installPackage(pkgConfig, pkgDownloadPath, manualOrAuto, forceInstall, keepDownloads) { return false; }
     if !keepDownloads {
@@ -76,7 +76,7 @@ let downloadAndInstallPackage = fn(pkgConfig, manualOrAuto, forceInstall = false
 # downloadPath is returned (it's an out variable)
 let downloadPackage = fn(pkgConfig, pkgDownloadPath) {
     pkgDownloadPath = getPkgDownloadPath(pkgConfig);
-    if fs.dirExists(pkgDownloadPath) { fs.remove(pkgDownloadPath); }
+    if fs.exists(pkgDownloadPath) { fs.remove(pkgDownloadPath); }
     let cmd = core.getPkgDownloadCmd(pkgConfig, pkgDownloadPath);
     io.cprintln('Downloading to: {g}', pkgDownloadPath, '{0}');
     let outLines = vec.new(refs = true);
@@ -155,7 +155,7 @@ let installPackage = fn(pkgConfig, pkgSourcePath, manualOrAuto = 'manual', force
     # There shouldn't be any duplicates in it.
     if !depPaths.empty() {
         io.cprintln('Adding {y}', depPaths.len(), '{0} entries to module paths ...');
-        let pkgModulePathsFilePath = fs.pathFrom(pkgInstallPath, '.modulePaths');
+        let pkgModulePathsFilePath = pkgInstallPath / '.modulePaths';
         let f = fs.fopen(pkgModulePathsFilePath, 'w+');
         for p in depPaths.each() {
             io.fprintln(f, p);

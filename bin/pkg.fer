@@ -24,9 +24,9 @@ if !args.has('task') {
 
 if !fs.exists(feral.tempPath) { fs.mkdir(feral.tempPath); }
 
-let logFileName = fs.pathFrom(feral.tempPath, 'feralPkg.log');
-logging.addTargetByName(logFileName, logging.Levels.TRACE, false);
-io.println('Writing full logs to: ', logFileName);
+let logFilePath = feral.tempPath / 'feralPkg.log';
+logging.addTargetByPath(logFilePath, logging.Levels.TRACE, false);
+io.println('Writing full logs to: ', logFilePath);
 
 pkg.init();
 
@@ -39,19 +39,19 @@ for arg in args.getPassthrough().each() {
 
 if task == 'install' || task == 'i' {
     if pkgNames.empty() { pkgNames.push('.'); }
-    let localPkg = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+    let localPkg = fs.exists(pkgNames[0] / 'package.fecl');
     if !pkg.install(pkgNames, args, localPkg) {
         feral.exit(1);
     }
 } elif task == 'remove' || task == 'r' {
     if pkgNames.empty() { pkgNames.push('.'); }
-    let localPkg = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+    let localPkg = fs.exists(pkgNames[0] / 'package.fecl');
     if !pkg.remove(pkgNames, args, localPkg) {
         feral.exit(1);
     }
 } elif task == 'build' || task == 'b' {
     if pkgNames.empty() { pkgNames.push('.'); }
-    let pkgFileExists = fs.exists(fs.pathFrom(pkgNames[0], 'package.fecl'));
+    let pkgFileExists = fs.exists(pkgNames[0] / 'package.fecl');
     if !pkgFileExists {
         io.ecprintln('{r}No package exists at path{0}:', pkgNames[0]);
         feral.exit(1);

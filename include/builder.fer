@@ -37,9 +37,9 @@ let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDep
     context.pkgVersion = pkgVersion;
     context.pkgSourcePath = pkgSourcePath; # Must have full path
     context.pkgInstallPath = pkgInstallPath;
-    context.pkgBuildPath = fs.pathFrom(context.pkgSourcePath, 'build');
-    context.pkgBinaryPath = fs.pathFrom(context.pkgSourcePath, 'bin');
-    context.pkgBinaryInstallPath = fs.pathFrom(context.pkgInstallPath, 'bin');
+    context.pkgBuildPath = context.pkgSourcePath / 'build';
+    context.pkgBinaryPath = context.pkgSourcePath / 'bin';
+    context.pkgBinaryInstallPath = context.pkgInstallPath / 'bin';
     context.pkgDependencyPaths = pkgDependencyPaths;
     context.task = task;
 
@@ -47,7 +47,7 @@ let setBuildInfo = fn(pkgName, pkgVersion, pkgSourcePath, pkgInstallPath, pkgDep
 };
 
 let build = fn() {
-    let ehWhatever = import(fs.pathFrom(context.pkgSourcePath, 'build')) or e {
+    let ehWhatever = import((context.pkgSourcePath / 'build').str()) or e {
         io.ecprintln('{r}Unable to import build script of the package:{0} ', e);
         return nil;
     };
@@ -62,14 +62,14 @@ let build = fn() {
 let run = fn(source) {
     let envMap = map.new(refs = true);
     envMap.insert('FERAL_PATHS', context.pkgDependencyPaths.join(os.envDelimiter));
-    os.exec(feral.binaryPath, fs.pathFrom(context.pkgSourcePath, source + '.fer', env = envMap));
+    os.exec(feral.binaryPath, context.pkgSourcePath / (source + '.fer'), env = envMap);
 };
 
 #############################################################################################################
 
 let build in Builder = fn() {
-    let cmakeListsPath = fs.pathFrom(context.pkgSourcePath, 'CMakeLists.txt');
-    let cmakeCachePath = fs.pathFrom(context.pkgBuildPath, 'CMakeCache.txt');
+    let cmakeListsPath = context.pkgSourcePath / 'CMakeLists.txt';
+    let cmakeCachePath = context.pkgBuildPath / 'CMakeCache.txt';
 
     let depsStr = '';
     for d in self.deps.each() {
@@ -85,13 +85,13 @@ let build in Builder = fn() {
     {
         # this is inside a block as file must be closed before it is used in cmake command
         let data = base.template.fmt();
-        let file = fs.fopen(fs.pathFrom(cmakeListsPath), 'w+');
+        let file = fs.fopen(cmakeListsPath, 'w+');
         io.fprintln(file, data);
         cmakeFileChanged = true;
     }
 
     # forces cmake to always execute and ignore grep command on windows
-    if fs.dirExists(context.pkgBuildPath) && (cmakeFileChanged || os.name == 'windows') {
+    if fs.exists(context.pkgBuildPath) && (cmakeFileChanged || os.name == 'windows') {
         fs.remove(context.pkgBuildPath);
     }
 
@@ -145,7 +145,7 @@ let build in Builder = fn() {
     if fs.exists(context.pkgBinaryInstallPath) {
         let files = fs.walkDir(context.pkgBinaryInstallPath);
         for src in files.each() {
-            let dest = fs.pathFrom(feral.libPath, 'bin', fs.fmtWithPath('$f', src));
+            let dest = feral.libPath / 'bin' / src.file();
             fs.mklink(src, dest);
             logging.info('Installed binary (created symlink): ', dest, ' -> ', src);
             io.cprintln('Installed binary: {g}', dest, '{0} -> {g}', src, '{0}');

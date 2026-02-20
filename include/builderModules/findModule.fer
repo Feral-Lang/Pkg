@@ -81,14 +81,14 @@ let makeOptional in FindModule = fn() {
 };
 
 let addSearchPath in FindModule = fn(path, suffix = '') {
-    self.includeDirs += '"' + path + '/include';
+    self.includeDirs += '"' + (path / 'include').str();
     if !suffix.empty() { self.includeDirs += '/' + suffix; }
     self.includeDirs += '" ';
-    self.searchPaths += '"' + path + '/lib';
+    self.searchPaths += '"' + (path / 'lib').str();
     if !suffix.empty() { self.searchPaths += '/' + suffix; }
     self.searchPaths += '" ';
     if os.name == 'windows' {
-        self.searchPaths += '"' + path + '/bin" ';
+        self.searchPaths += '"' + path.str() + '/bin" ';
     }
     return ref(self);
 };
@@ -123,7 +123,7 @@ let vcpkg = os.getEnv('VCPKG_ROOT');
 if vcpkg == nil {
     raise('vcpkg is required for building on Windows');
 }
-let vcpkgBin = fs.pathFrom(vcpkg, 'vcpkg.exe');
+let vcpkgBin = vcpkg / 'vcpkg.exe';
 let checkVCPkgPackageInstalled in FindModule = fn() {
     let outLines = vec.new(refs = true);
     if os.exec(vcpkgBin, 'list', self.name, '^2>&1', out = outLines) != 0 {

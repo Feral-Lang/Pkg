@@ -20,7 +20,7 @@ let init = fn() {
     let firstRun = false;
 
     logging.trace('Checking if dir exists: ', core.rootDir);
-    if !fs.dirExists(core.rootDir) {
+    if !fs.exists(core.rootDir) {
         logging.info('Dir: ', core.rootDir, ' does not exist. Creating it');
         fs.mkdir(core.rootDir);
         logging.info('Successfully created dir: ', core.rootDir);
@@ -53,8 +53,8 @@ let update = fn() { return index.update(); };
 
 let build = fn(pkgPath, args) {
     index.warnToUpdate();
-    pkgPath = fs.absPath(pkgPath);
-    let configPath = fs.pathFrom(pkgPath, 'package.fecl');
+    pkgPath = pkgPath.path().absolute();
+    let configPath = pkgPath / 'package.fecl';
     if !fs.exists(configPath) {
         logging.fatal('Could not find a package.fecl config in path: ', pkgPath);
         io.ecprintln('{r}Could not find a package.fecl config file in path: ', pkgPath);
@@ -67,8 +67,8 @@ let build = fn(pkgPath, args) {
 
 let build = fn(pkgNames, args) {
     index.warnToUpdate();
-    let pkgPath = fs.absPath(pkgNames[0]);
-    let configPath = fs.pathFrom(pkgPath, 'package.fecl');
+    let pkgPath = pkgNames[0].path().absolute();
+    let configPath = pkgPath / 'package.fecl';
     if !fs.exists(configPath) {
         logging.fatal('Could not find a package.fecl config in path: ', pkgPath);
         io.ecprintln('{r}Could not find a package.fecl config file in path: ', pkgPath);
@@ -88,8 +88,8 @@ let build = fn(pkgNames, args) {
 let install = fn(pkgNames, args, localPkg) {
     index.warnToUpdate();
     if localPkg {
-        let pkgPath = fs.absPath(pkgNames[0]);
-        let configPath = fs.pathFrom(pkgPath, 'package.fecl');
+        let pkgPath = pkgNames[0].path().absolute();
+        let configPath = pkgPath / 'package.fecl';
         if !fs.exists(configPath) {
             logging.fatal('Could not find a package.fecl config in path: ', pkgPath);
             io.ecprintln('{r}Could not find a package.fecl config file in path: ', pkgPath);
@@ -126,8 +126,8 @@ let install = fn(pkgNames, args, localPkg) {
 let remove = fn(pkgNames, args, localRemove) {
     index.warnToUpdate();
     if localRemove {
-        let pkgPath = fs.absPath(pkgNames[0]);
-        let configPath = fs.pathFrom(pkgPath, 'package.fecl');
+        let pkgPath = pkgNames[0].path().absolute();
+        let configPath = pkgPath / 'package.fecl';
         if !fs.exists(configPath) {
             logging.fatal('Could not find a package.fecl config in path: ', pkgPath);
             io.ecprintln('{r}Could not find a package.fecl config file in path: ', pkgPath);
@@ -171,7 +171,7 @@ let pkgModuleFinder = fn(module, isimport) {
     if !isimport { return nil; }
     let moduleFile = module + '.fer';
     for moduleDir in pkgModulePaths.each() {
-        let testPath = fs.pathFrom(moduleDir, moduleFile);
+        let testPath = moduleDir / moduleFile;
         if fs.exists(testPath) { return testPath; }
     }
     return nil;

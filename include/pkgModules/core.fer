@@ -6,8 +6,8 @@ let os = import('std/os');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
 
-let rootDir = fs.pathFrom(feral.libPath, 'pkg');
-let rootConfigPath = fs.pathFrom(rootDir, 'config.fecl');
+let rootDir = feral.libPath / 'pkg';
+let rootConfigPath = rootDir / 'config.fecl';
 
 let defaultRootConfig = `indexLastUpdated = 0;`;
 

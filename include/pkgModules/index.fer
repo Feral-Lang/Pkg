@@ -7,8 +7,8 @@ let logging = import('std/logging');
 
 let core = import('./core');
 
-let indexRootDir = fs.pathFrom(core.rootDir, 'index');
-let indexListDir = fs.pathFrom(indexRootDir, 'pkgs');
+let indexRootDir = core.rootDir / 'index';
+let indexListDir = indexRootDir / 'pkgs';
 
 let indexRepo = 'https://github.com/Feral-Lang/PkgIndex';
 
@@ -67,7 +67,7 @@ let packageExists = fn(pkgName) {
 };
 
 let getPackageConfigPathIfExists = fn(pkgName) {
-    let pkgConfigPath = fs.pathFrom(indexListDir, pkgName + '.fecl');
+    let pkgConfigPath = indexListDir / (pkgName + '.fecl');
     if fs.exists(pkgConfigPath) { return ref(pkgConfigPath); }
     return nil;
 };
