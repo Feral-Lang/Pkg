@@ -5,21 +5,21 @@ let vec = import('std/vec');
 let context = import('./context');
 
 let findLibraryBase =
-`if(NOT "{hasIncludeDirs}" MATCHES "")
-    include_directories({self.includeDirs})
+`if(NOT "$<<hasIncludeDirs>>" MATCHES "")
+    include_directories($<<self.includeDirs>>)
 endif()
-find_library({self.targetLinkVar} $\\{WIN_LIB_PREFIX}{self.libName}{self.pathSuffixes}{self.required}{self.searchPaths})
-if({self.targetLinkVar})
-    message("-- Found library {self.name}; Will be linked as: {self.getTargetString()}")
+find_library($<<self.targetLinkVar>> ${WIN_LIB_PREFIX}$<<self.libName>>$<<self.pathSuffixes>>$<<self.required>>$<<self.searchPaths>>)
+if($<<self.targetLinkVar>>)
+    message("-- Found library $<<self.name>>; Will be linked as: $<<self.getTargetString()>>")
 endif()
 `;
 let findPackageBase =
-`if(NOT "{hasIncludeDirs}" MATCHES "")
-    include_directories({self.includeDirs})
+`if(NOT "$<<hasIncludeDirs>>" MATCHES "")
+    include_directories($<<self.includeDirs>>)
 endif()
-find_package({self.name} {self.pathSuffixes}{self.required}{self.searchPaths})
-if({self.name}_FOUND)
-    message("-- Found package {self.name}; Will be linked as: {self.getTargetString()}")
+find_package($<<self.name>> $<<self.pathSuffixes>>$<<self.required>>$<<self.searchPaths>>)
+if($<<self.name>>_FOUND)
+    message("-- Found package $<<self.name>>; Will be linked as: $<<self.getTargetString()>>")
 endif()
 `;
 

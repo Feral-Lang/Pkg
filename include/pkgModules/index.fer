@@ -44,7 +44,7 @@ let update = fn() {
                 logging.fatal('-- ', out);
             }
             logging.fatal('Failed to update package index repository');
-            io.ecprintlnt('{r}Failed to update package index repository!');
+            io.ecprintln('{r}Failed to update package index repository!');
             return false;
         }
         logging.trace('Package index repository has been updated');
