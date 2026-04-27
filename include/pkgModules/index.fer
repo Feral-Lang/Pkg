@@ -99,7 +99,7 @@ let shouldUpdate = fn() {
     logging.info('Checking if pkg index should be updated (if it\'s been more than 7 days since it was last updated)');
     let lastUpdateTime = config.indexLastUpdated;
     let currentTime = time.now();
-    let microSecondsIn7Days = time.toMicroSeconds(days = 7);
+    let microSecondsIn7Days = time.to(time.micro, days = 7).int();
     logging.trace('Last updated at: ', lastUpdateTime, '; Current time: ', currentTime,
               '; Minimum (that Current - Last should be): ', microSecondsIn7Days);
     return currentTime - lastUpdateTime > microSecondsIn7Days;
