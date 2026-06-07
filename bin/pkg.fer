@@ -9,13 +9,13 @@ let argparse = import('std/argparse');
 
 let pkg = import('pkg/pkg');
 
-let args = argparse.new(feral.args);
-args.addArg('version').addOpts('--version', '-v').setHelp('Display program version');
-args.addArg('force').addOpts('--force', '-f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
-args.addArg('keep').addOpts('--keep', '-k').setHelp('Keep the intermediate files (downloads) when installing packages');
-args.addArg('task').setValReqd(true).setHelp('Task to perform. One of (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
-args.setLastArg('task');
-args.parse();
+let args = argparse.new('Pkg', 'Feral package manager');
+args.addOpt('version').addOpts('--version', '-v').setHelp('Display program version');
+args.addOpt('force').addOpts('--force', '-f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
+args.addOpt('keep').addOpts('--keep', '-k').setHelp('Keep the intermediate files (downloads) when installing packages');
+args.addOpt('task').setReqd(true).setHelp('Task to perform. One of (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
+args.addOpt('pkgs').setNargs(-1).setHelp('Package names');
+args.parse(feral.args);
 
 if !args.has('task') {
     io.ecprintln('{r}Please provide the task to perform{0} - (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
@@ -32,10 +32,7 @@ pkg.init();
 
 let task = args.getValue('task');
 
-let pkgNames = vec.new(refs = true);
-for arg in args.getPassthrough().each() {
-    pkgNames.push(arg);
-}
+let pkgNames = args.getValues('pkgs');
 
 if task == 'install' || task == 'i' {
     if pkgNames.empty() { pkgNames.push('.'); }
