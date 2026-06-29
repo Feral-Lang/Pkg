@@ -20,8 +20,10 @@ let cxx = import('std/cxx');
 let map = import('std/map');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
+let result = import('std/result');
 let logging = import('std/logging');
 let version = import('std/version');
+let platform = import('std/platform');
 
 let core = import('./core');
 let index = import('./index');
@@ -174,25 +176,31 @@ let installDeps = fn(lockData, depPaths) {
     let deps = vec.new(refs = true);
     for d in depItems.each() {
         logging.trace('[install] processing dependency ', d.name, ': ', d.constraint);
-        io.cprintln('{y}Processing dependency {c}', d.name, '{0}: {c}', d.constraint, '{0} ...');
+        io.cprintln('{y}Processing', d.isFeral ? ' Feral' : '', ' dependency {c}', d.name, '{0}: {c}', d.constraint, '{0} ...');
         if d.isFeral {
-            let v = index.lookup(d.name, constraint = d.constraint);
-            if v == nil {
-                logging.trace('[install] could not find version satisfying constraint `', d.constraint, '` for dependency ', d.name);
-                io.cprintln('{br}FATAL{0}: {y}Could not find dependency package {c}', d.name, ' {y}satisfying constraint {c}', d.constraint, '{0}!');
-                return nil;
+            let installed = getInstalled(d.name, constraint = d.constraint);
+            if installed == nil {
+                let v = index.lookup(d.name, constraint = d.constraint);
+                if v == nil {
+                    logging.trace('[install] could not find version satisfying constraint `', d.constraint, '` for dependency ', d.name);
+                    io.cprintln('{br}FATAL{0}: {y}Could not find dependency package {c}', d.name, ' {y}satisfying constraint {c}', d.constraint, '{0}!');
+                    return nil;
+                }
+                let depDir = downloader.get(d.name, v.version, v.url, v.sha256);
+                if depDir == nil { return nil; }
+                if !installLocal(depDir, false) { return nil; }
+                depPaths.push(core.getPkgInstallPath(d.name, v.version));
+            } else {
+                depPaths.push(core.getPkgInstallPath(d.name, installed));
             }
-            let depDir = downloader.get(d.name, v.version, v.url, v.sha256);
-            if depDir == nil { return nil; }
-            if !installLocal(depDir) { return nil; }
-            depPaths.push(core.getPkgInstallPath(name, v.version));
         }
         let dep = cxx.findLibrary(d.name, version = d.constraint, feral = d.isFeral);
         if dep.isErr() {
             logging.trace('[install] could not find dependency: ', dep.getVal().getMsg());
             io.cprintln('{br}FATAL{0}: {y}Could not find library dependency {c}', d.name, '{0}:\n', dep.getVal().getMsg());
-            return false;
+            return nil;
         }
+        io.cprintln('- {g}Found{0}: {c}', d.name, '{0}@{c}', dep.getVal().version, '{0}!');
         deps.push(dep.getVal());
     }
     return deps;
@@ -211,7 +219,7 @@ let getInstalled = fn(name, .kw) {
     if constraint != nil {
         let versions = index.lookup(name, constraint = constraint, all = true);
         for v in versions.each() {
-            if fs.exists(core.getPkgInstallPath(name, v)) { return v.version; }
+            if fs.exists(core.getPkgInstallPath(name, v.version)) { return v.version; }
         }
         return nil;
     }

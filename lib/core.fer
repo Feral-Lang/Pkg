@@ -57,7 +57,7 @@ let getLockFromFileIn = fn(dir) {
 };
 
 let getPkgInstallPath = fn(name, vers) {
-    return installRoot / 'pkgs' / (name + '--' + vers);
+    return installRoot / 'pkgs' / (name.lower() + '--' + vers);
 };
 
 let getPkgLockPath = fn(dir) {

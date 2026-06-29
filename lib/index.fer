@@ -11,6 +11,7 @@ let io = import('std/io');
 let fs = import('std/fs');
 let os = import('std/os');
 let map = import('std/map');
+let vec = import('std/vec');
 let fecl = import('std/fecl');
 let time = import('std/time');
 let logging = import('std/logging');
@@ -197,9 +198,10 @@ let lookupInMeta = fn(meta, name, .kw) {
     if constraint != nil {
         let all = kw['all'] ?? false;
         let res = vec.new(refs = true);
+        let cons = version.parseConstraint(constraint);
         for v in versions.each() {
             let vObj = version.parse(v.version);
-            if constraint.matches(vObj) { res.push(v); }
+            if cons.matches(vObj) { res.push(v); }
         }
         if res.empty() {
             logging.trace('[index] could not find ', name, ' with constraint: ', constraint);
