@@ -1,0 +1,52 @@
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+let fecl = import('std/fecl');
+let hashing = import('std/hashing');
+let logging = import('std/logging');
+
+let core = import('./core');
+
+"
+Returns the directory where package is downloaded and extracted in
+"
+let get = fn(name, version, url, hash, force = false) {
+    let outDir = core.tmpRoot / (name + '-' + version);
+    let fileName = name + '-' + version + '.zip';
+    if fs.exists(outDir) {
+        if !force { return outDir; }
+        fs.remove(outDir);
+    }
+    let filePath = core.tmpRoot / fileName;
+    if fs.exists(filePath) {
+        let actualHash = hashing.sha256File(filePath);
+        if actualHash != hash { fs.remove(filePath); }
+    }
+    if !fs.exists(filePath) {
+        logging.trace('[core] downloading ', url, ' -> ', filePath);
+        io.cprintln('{y}Downloading {c}', url, ' {0}-> {c}', filePath, ' {0}...');
+        let out = '';
+        if os.exec(out = out, core.curlCmd, '-sSL', '--output-dir', core.tmpRoot, url, '-o', fileName) != 0 {
+            logging.trace('[core] failed to download `', url, '`:\n', out);
+            io.cprintln('{br}FATAL{0}: {y}Failed to download from {c}', url, '{0}! {br}Error{0}:');
+            io.println(out);
+            return nil;
+        }
+    }
+    let actualHash = hashing.sha256File(filePath);
+    if actualHash != hash {
+        logging.trace('[core] hash mismatch when downloading ', filePath, '; given: `', hash, '`, actual: `', actualHash, '`');
+        io.cprintln('{br}FATAL{0}: {y}Hash mismatch when downloading {c}', filePath, '{0}!');
+        return nil;
+    }
+    fs.mkdir(outDir);
+    let out = '';
+    if os.exec(out = out, core.tarCmd, '--strip-components=1', '-C', outDir, '-x', '-f', filePath, '^2>&1') != 0 {
+        logging.trace('[core] failed to extract ', filePath, ':\n', out);
+        io.cprintln('{br}FATAL{0}: {y}Failed to extract the archive {c}', filePath, '{0}!');
+        return false;
+    }
+    fs.remove(filePath);
+    return outDir;
+};

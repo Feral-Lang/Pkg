@@ -1,0 +1,264 @@
+# Builds and installs packages for Feral.
+# To install a package, the following process is to be followed:
+# 0. if a name is provided, get the package from index.
+# 1. read package.fer in package dir
+# 2. go through dependencies and install() them (TBD)
+# 3. run installLocal(dir, pkgInfo) which performs the following:
+#   a. generate cmakelists to install everything from bin/, lib/*.fer, and build any C++ extensions if present.
+#      the installation is done in core.cacheRoot / <pkgName>-<version>
+#   b. run installation through cmakelists
+#   c. if bin/ is present, create a symlink to feral.libPath / 'bin'.
+#   d. if manually installed:
+#      i. create a symlink of installation dir to core.installRoot / <pkgName>-<version>
+#      ii. update state.fecl (using `state` module) to reflect installation
+#   e. if it's an auto install, write the source as a dependent in package's state.fecl
+
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let cxx = import('std/cxx');
+let map = import('std/map');
+let vec = import('std/vec');
+let fecl = import('std/fecl');
+let logging = import('std/logging');
+let version = import('std/version');
+
+let core = import('./core');
+let index = import('./index');
+let downloader = import('./downloader');
+
+let handle = fn(sub) {
+    let names = sub.getValues('name');
+    if names.empty() {
+        return install(dir = os.getCWD());
+    }
+    for name in names.each() {
+        if !install(name = name) { return false; }
+    }
+    return true;
+};
+
+let install = fn(.kw) {
+    let dir = kw['dir'] ?? ''.path();
+    let name = kw['name'] ?? '';
+    let version = kw['version'] ?? '';
+    let constraint = kw['constraint'] ?? '';
+    let manual = kw['manual'] ?? true;
+
+    if !name.empty() {
+        inline if !version.empty() {
+            let v = index.lookup(name, version = version);
+            if v == nil {
+                logging.trace('[install] could not find version `', version, '` for package ', name);
+                io.cprintln('{br}FATAL{0}: {y}Could not find package {c}', name, '{0}@{c}', version, '{0}!');
+                return false;
+            }
+        } elif !constraint.empty() {
+            let v = index.lookup(name, constraint = constraint);
+            if v == nil {
+                logging.trace('[install] could not find version satisfying constraint `', constraint, '` for package ', name);
+                io.cprintln('{br}FATAL{0}: {y}Could not find package {c}', name, ' {y}satisfying constraint {c}', constraint, '{0}!');
+                return false;
+            }
+        } else {
+            let v = index.lookup(name, current = true);
+            if v == nil {
+                logging.trace('[install] could not find current version for package ', name);
+                io.cprintln('{br}FATAL{0}: {y}Could not find package {c}', name, '{0}!');
+                return false;
+            }
+        }
+        let tmp = downloader.get(name, v.version, v.url, v.sha256);
+        if tmp == nil { return false; }
+        dir = tmp; # tmpRoot / <name>-<version>
+    }
+    if dir.str().empty() {
+        dir = os.getCWD();
+    }
+    return installLocal(dir, manual);
+};
+
+let installLocal = fn(dir, isManual) {
+    logging.trace('[install] installing from dir: ', dir);
+    let pkg = core.getPkgFromScriptIn(dir);
+    if pkg == nil { return false; }
+    let lck = core.getLockFromFileIn(dir);
+    if lck == nil { return false; }
+    let feralConstraint = version.parseConstraint(pkg.feral);
+    let feralVersion = version.parse(feral.version);
+    if !feralConstraint.matches(feralVersion) {
+        logging.trace('[install] feral version required by package ', pkg.name, ' is `', pkg.feral, '`; running `', feral.version, '`');
+        io.cprintln('{br}FATAL{0}: {y}Package {c}', pkg.name, ' {y}requires feral version {c}', pkg.feral, '{0}; {y}Current running version is {c}', feral.version, '{0}!');
+        return false;
+    }
+    logging.trace('[install] installing ', pkg.name, '@', pkg.version);
+    io.cprintln('{y}Installing package {c}', pkg.name, '{0}@{c}', pkg.version, ' {y}from {c}', dir, '{0} ...');
+
+    let pkgInstallPath = core.getPkgInstallPath(pkg.name, pkg.version);
+    if fs.exists(pkgInstallPath / 'state.fecl') {
+        logging.trace('[install] package already installed in ', pkgInstallPath);
+        io.cprintln('{g}Package is already installed{0}!');
+        return true;
+    }
+    let depPaths = vec.new(refs = true);
+    let deps = installDeps(lck, depPaths);
+    if deps == nil { return false; }
+    let exts = vec.new(refs = true);
+    for t in pkg.targets.each() {
+        let ext = cxx.newExt(t.name);
+        for s in t.sources.each() {
+            let srcPath = dir / 'lib' / s;
+            if !fs.exists(srcPath) {
+                logging.trace('[install] source `', srcPath, '` for target `', t.name, '` does not exist!');
+                io.cprintln('{br}FATAL{0}: {y}Could not find path {c}', srcPath, ' {y}required by target {c}', t.name, '{0}!');
+                return false;
+            }
+            ext.addSources(srcPath);
+        }
+        ext.requires(deps...);
+        exts.push(ext);
+    }
+    let pkgInstallLibPath = pkgInstallPath / pkg.name.lower();
+    if !fs.exists(pkgInstallLibPath) {
+        fs.mkdir(pkgInstallLibPath);
+    }
+    let libFiles = fs.walkDir(dir / 'lib', fs.WALK_FILES, '(.*).fer|(.*).hpp');
+    for f in libFiles.each() {
+        let outFile = pkgInstallLibPath / f.file();
+        io.cprint('- {y}Installing {c}', outFile, ' {0}... ');
+        io.fflush(io.stdout);
+        fs.install(f, outFile);
+        io.cprintln('{g}succeeded{0}!');
+    }
+    if fs.exists(dir / 'bin') && isManual {
+        let binFiles = fs.walkDir(dir / 'bin', fs.WALK_FILES, '(.*).fer');
+        for f in binFiles.each() {
+            let outFile = pkgInstallLibPath / f.file();
+            io.cprint('- {y}Installing {c}', outFile, ' {0}... ');
+            io.fflush(io.stdout);
+            fs.install(f, outFile);
+            io.cprintln('{g}succeeded{0}!');
+            let linkFile = feral.libPath / 'bin' / f.file();
+            io.cprint('-- {y}Linking to {c}', linkFile, ' {0}... ');
+            io.fflush(io.stdout);
+            fs.mklink(outFile, linkFile);
+            io.cprintln('{g}succeeded{0}!');
+        }
+    }
+    if isManual {
+        # add to the global .modulePaths
+        feral.addGlobalModulePaths(pkgInstallPath);
+    }
+    if !depPaths.empty() {
+        feral.addToModulePaths(pkgInstallPath / '.modulePaths', depPaths...);
+    }
+    for e in exts.each() {
+        io.cprint('{y}Building and installing extension {c}', e.name, '{0} ... ');
+        io.fflush(io.stdout);
+        let cmd = '';
+        let res = e.build(pkgInstallLibPath, cmd);
+        if !res.isOk() {
+            logging.trace('[install] failed to build ', e.name, ' using command `', cmd, '`:\n', res.getVal().getMsg());
+            io.cprintln('{br}failed{0}!\n', res.getVal().getMsg());
+            return false;
+        } else {
+            io.cprintln('{g}succeeded{0}!');
+        }
+    }
+    return true;
+};
+
+# depPaths must be added to the local modulePaths for the package
+let installDeps = fn(lockData, depPaths) {
+    let depItems = ref(lockData['deps']);
+    let deps = vec.new(refs = true);
+    for d in depItems.each() {
+        logging.trace('[install] processing dependency ', d.name, ': ', d.constraint);
+        io.cprintln('{y}Processing dependency {c}', d.name, '{0}: {c}', d.constraint, '{0} ...');
+        if d.isFeral {
+            let v = index.lookup(d.name, constraint = d.constraint);
+            if v == nil {
+                logging.trace('[install] could not find version satisfying constraint `', d.constraint, '` for dependency ', d.name);
+                io.cprintln('{br}FATAL{0}: {y}Could not find dependency package {c}', d.name, ' {y}satisfying constraint {c}', d.constraint, '{0}!');
+                return nil;
+            }
+            let depDir = downloader.get(d.name, v.version, v.url, v.sha256);
+            if depDir == nil { return nil; }
+            if !installLocal(depDir) { return nil; }
+            depPaths.push(core.getPkgInstallPath(name, v.version));
+        }
+        let dep = cxx.findLibrary(d.name, version = d.constraint, feral = d.isFeral);
+        if dep.isErr() {
+            logging.trace('[install] could not find dependency: ', dep.getVal().getMsg());
+            io.cprintln('{br}FATAL{0}: {y}Could not find library dependency {c}', d.name, '{0}:\n', dep.getVal().getMsg());
+            return false;
+        }
+        deps.push(dep.getVal());
+    }
+    return deps;
+};
+
+let getInstalled = fn(name, .kw) {
+    let vers = kw['version'];
+    let constraint = kw['constraint'];
+    if vers != nil {
+        let v = index.lookup(name, version = vers);
+        if v == nil { return nil; }
+        let installPath = core.getPkgInstallPath(name, v.version);
+        if fs.exists(installPath) { return v.version; }
+        return nil;
+    }
+    if constraint != nil {
+        let versions = index.lookup(name, constraint = constraint, all = true);
+        for v in versions.each() {
+            if fs.exists(core.getPkgInstallPath(name, v)) { return v.version; }
+        }
+        return nil;
+    }
+    let versions = index.lookup(name);
+    if versions == nil { return nil; }
+    for v in versions.each() {
+        let installPath = core.getPkgInstallPath(name, v.version);
+        if fs.exists(installPath) { return v.version; }
+    }
+    return nil;
+};
+
+let uninstall = fn(name, vers = nil) {
+};
+
+####################################################################################################
+########################################## PkgFinder ###############################################
+####################################################################################################
+
+let PkgFinder = struct();
+PkgFinder.setTypeName('PkgFinder');
+
+let findLibrary in PkgFinder = fn(pkgName, .kw) {
+    let isDebug = kw['debug'] ?? false;
+    let versConstraint = kw['version'] ?? '*';
+    let isFeral = kw['feral'] ?? false;
+    if !isFeral { return result.err(-1, 'PkgFinder cannot be used to find non-feral libraries'); }
+    let installed = getInstalled(pkgName, constraint = versConstraint);
+    if installed == nil { return result.err(-1, 'Package ', pkgName, '@', versConstraint, ' is not installed'); }
+    let installedPath = core.getPkgInstallPath(pkgName, installed);
+    let lib = platform.Library(pkgName, installed);
+    let libPath = installedPath / pkgName.lower();
+    lib.addIncludeDirs(libPath);
+    lib.addLibraryDirs(libPath);
+    let files = fs.walkDir(libPath, fs.WALK_FILES, '(.*).lib|(.*).so|(.*).dylib|(.*).dll');
+    for f in files.each() {
+        if f.str().endsWith('.dll') {
+            lib.addDllPaths(f);
+            continue;
+        }
+        if os.name == 'windows' {
+            lib.addLibraryFlags(f.fileName().str());
+        } else {
+            lib.addLibraryFlags('-l' + f.fileName().str().replace('lib', ''));
+        }
+    }
+    return result.ok(lib);
+};
+
+cxx.libraryFinders.push(PkgFinder());

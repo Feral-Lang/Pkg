@@ -1,0 +1,109 @@
+# Generate lockfiles using the package + dependency information in package.fer in current directory.
+# Format:
+#   deps = [
+#       { name = '...'; constraint = '...'; url = '...'; sha256 = '...'; };
+#       ...
+#   ];
+
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let map = import('std/map');
+let vec = import('std/vec');
+let fecl = import('std/fecl');
+let logging = import('std/logging');
+let version = import('std/version');
+
+let core = import('./core');
+let index = import('./index');
+let downloader = import('./downloader');
+
+let handle = fn(sub) {
+    return generate(os.getCWD());
+};
+
+let generate = fn(dir) {
+    logging.trace('[lock] generating lock file in ', dir);
+    io.cprintln('{y}Generating lock file in {c}', dir, ' {0}...');
+    let lockFilePath = core.getPkgLockPath(dir);
+    let pkg = core.getPkgFromScriptIn(dir);
+    if pkg == nil { return false; }
+    let deps = fetchAllDependencies(pkg);
+    if deps == nil { return false; }
+    let outMap = map.new(refs = true, 'deps', deps);
+    let f = fs.fopen(lockFilePath, 'w+');
+    io.fprintln(f, fecl.dumps(outMap, 0, '    '));
+    logging.trace('[lock] generated lock file: ', lockFilePath);
+    io.cprintln('{g}Successfully generated lock file {c}', lockFilePath, '{0}!');
+    return true;
+};
+
+let fetchAllDependencies = fn(pkg) {
+    let deps = vec.new(refs = true);
+    for d in pkg.dependencies.each() {
+        if !d.isFeral {
+            let depMap = map.new(
+                'name', d.name,
+                'constraint', d.constraint,
+                'url', '',
+                'sha256', '',
+                'isFeral', false
+            );
+            deps.push(depMap);
+            continue;
+        }
+        let viableVersion = index.lookup(d.name.lower(), constraint = d.constraint);
+        if viableVersion == nil {
+            logging.trace('[lock] could not locate a viable version for dependency ', d.name, ' using constraint: ', constraint);
+            io.cprintln('{br}FATAL{0}: {y}Could not find a viable version for dependency {c}', d.name, ' {y}which satisfies constraint{0}: {c}', constraint, '{0}!');
+            return nil;
+        }
+        let depMap = map.new(
+            'name', d.name,
+            'constraint', d.constraint,
+            'url', viableVersion.url,
+            'sha256', viableVersion.sha256,
+            'isFeral', true
+        );
+        deps.push(depMap);
+        let subDeps = getPackageDependencies(d.name, viableVersion);
+        if subDeps == nil { return nil; }
+        for s in subDeps.each() {
+            let found = false;
+            for dep in deps.each() {
+                if dep.name == s.name {
+                    found = true;
+                    let cons = version.intersect(dep.constraint, s.constraint);
+                    if cons == nil {
+                        logging.trace('[lock] could not resolve dependency conflict for ', dep.name, '; existing constraint: ', dep.constraint, ', constraint from dependency of ', d.name, ': ', s.constraint);
+                        io.cprintln('{br}FATAL{0}: {y}Encountered a dependency conflict for {c}', dep.name, '{0}.');
+                        io.cprintln('    {y}A previous package requires {c}', dep.constraint, '{0},');
+                        io.cprintln('    {c}', d.name, ' {y}requires {c}', s.constraint, '{0}!');
+                        return nil;
+                    }
+                    dep.constraint = cons;
+                    break;
+                }
+            }
+            if found { continue; }
+            deps.push(s);
+        }
+    }
+    return deps;
+};
+
+let getPackageDependencies = fn(name, versionInfo) {
+    let pkgDir = downloader.get(name, versionInfo.version, versionInfo.url, versionInfo.sha256);
+    if pkgDir == nil {
+        logging.trace('[lock] failed to get dependencies for package: ', name, '@', versionInfo.version);
+        io.cprintln('{br}FATAL{0}: {y}Failed to get dependencies for package {c}', name, '{0}@{c}', versionInfo.version, '{0}!');
+        return nil;
+    }
+    let lockInfo = core.getLockFromFileIn(pkgDir);
+    if lockInfo == nil {
+        logging.trace('[lock] failed to read lock file in ', pkgDir);
+        io.cprintln('{br}FATAL{0}: {y}Failed to read lock file in {c}', pkgDir, '{0}!');
+        return nil;
+    }
+    return ref(lockInfo['deps']);
+};

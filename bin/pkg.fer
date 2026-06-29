@@ -1,83 +1,67 @@
 let io = import('std/io');
-let fs = import('std/fs');
-let os = import('std/os');
-let vec = import('std/vec');
-let fecl = import('std/fecl');
-let time = import('std/time');
 let logging = import('std/logging');
 let argparse = import('std/argparse');
 
-let pkg = import('pkg/pkg');
+let pkgCore = import('../lib/core');
+let pkgLock = import('../lib/lock');
+#let pkgCMake = import('../lib/cmake');
+let pkgIndex = import('../lib/index');
+let pkgCreate = import('../lib/create');
+let pkgInstall = import('../lib/install');
 
-let args = argparse.new('Pkg', 'Feral package manager');
-args.addOpt('version').addOpts('--version', '-v').setHelp('Display program version');
-args.addOpt('force').addOpts('--force', '-f').setHelp('Force the operation - in case of install, will reinstall a package if it\'s already installed');
-args.addOpt('keep').addOpts('--keep', '-k').setHelp('Keep the intermediate files (downloads) when installing packages');
-args.addOpt('task').setReqd(true).setHelp('Task to perform. One of (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
-args.addOpt('pkgs').setNargs(-1).setHelp('Package names');
-args.parse(feral.args);
+let p = argparse.new('Pkg', 'The Feral package manager');
+let subs = p.addSubparsers('command');
 
-if !args.has('task') {
-    io.ecprintln('{r}Please provide the task to perform{0} - (i)nstall|(r)emove|(u)pdate|up(g)rade|i(n)fo|(l)ist');
-    feral.exit(1);
-}
+let initSub = subs.add('init', 'Initialize a package in the current directory');
+initSub.addPos('name').setDefault('').setHelp('Package name');
+initSub.addFlag('bin').addOpts('--bin').setHelp('Also create a bin/ directory for executable scripts');
+initSub.addOpt('version').addOpts('--version').setDefault('0.0.1').setHelp('Initial version');
+initSub.addOpt('feral').addOpts('--feral').setDefault('>=' + feral.version).setHelp('Minimum Feral version constraint (default: >=<current version>)');
+initSub.addOpt('author').addOpts('--author').setHelp('Author "Name <email>" (default: from git config)');
+initSub.addOpt('desc').addOpts('--desc').setDefault('TODO: add description').setHelp('Short package description');
 
-if !fs.exists(feral.tempPath) { fs.mkdir(feral.tempPath); }
+subs.add('lock', 'Resolve dependencies and generate package.lock');
 
-let logFilePath = feral.tempPath / 'feralPkg.log';
+let buildSub = subs.add('build', 'Build the package (using CMake) in given or current directory');
+buildSub.addPos('dir').setHelp('Package directory (default: current directory)');
+
+let installSub = subs.add('install', 'Install a package and all dependencies from package.fer / package.lock');
+installSub.addPos('name').setNargs(-1).setReqd(false).setHelp('Package name (omit to install from package.fer)');
+
+let uninstallSub = subs.add('uninstall', 'Uninstall an installed package');
+uninstallSub.addPos('name').setReqd(true).setHelp('Package name');
+uninstallSub.addOpt('version').addOpts('--version').setHelp('Package version to uninstall');
+
+let indexSub = subs.add('index', 'Manage package indices');
+let indexSubSubs = indexSub.addSubparsers('indexcmd');
+let indexAddSub = indexSubSubs.add('add', 'Register a new index');
+indexAddSub.addPos('url').setReqd(true).setHelp('Index URL');
+let indexRemoveSub = indexSubSubs.add('remove', 'Remove a registered index');
+indexRemoveSub.addPos('url').setReqd(true).setHelp('Index URL');
+let indexUpdateSub = indexSubSubs.add('update', 'Update an index (or all indices if no URL given)');
+indexUpdateSub.addPos('url').setReqd(false).setHelp('Index URL (omit to update all)');
+indexSubSubs.add('list', 'List all registered indices');
+
+p.parse(feral.args);
+
+let cmd = p.getSubcmd();
+let sub = p.getSubparser();
+
+let logFilePath = pkgCore.tmpRoot / 'feralPkg.log';
 logging.addTargetByPath(logFilePath, logging.Levels.TRACE, false);
 io.println('Writing full logs to: ', logFilePath);
 
-pkg.init();
-
-let task = args.getValue('task');
-
-let pkgNames = args.getValues('pkgs');
-
-if task == 'install' || task == 'i' {
-    if pkgNames.empty() { pkgNames.push('.'); }
-    let localPkg = fs.exists(pkgNames[0] / 'package.fecl');
-    if !pkg.install(pkgNames, args, localPkg) {
-        feral.exit(1);
-    }
-} elif task == 'remove' || task == 'r' {
-    if pkgNames.empty() { pkgNames.push('.'); }
-    let localPkg = fs.exists(pkgNames[0] / 'package.fecl');
-    if !pkg.remove(pkgNames, args, localPkg) {
-        feral.exit(1);
-    }
-} elif task == 'build' || task == 'b' {
-    if pkgNames.empty() { pkgNames.push('.'); }
-    let pkgFileExists = fs.exists(pkgNames[0] / 'package.fecl');
-    if !pkgFileExists {
-        io.ecprintln('{r}No package exists at path{0}:', pkgNames[0]);
-        feral.exit(1);
-    }
-    if !pkg.build(pkgNames, args) {
-        feral.exit(1);
-    }
-} elif task == 'update' || task == 'u' {
-    if !pkg.update() {
-        feral.exit(1);
-    }
-} elif task == 'upgrade' || task == 'g' {
-    # optionally takes pkgNames and upgrades only those packages.
-    if !pkg.upgrade(pkgNames) {
-        feral.exit(1);
-    }
-} elif task == 'info' || task == 'n' {
-    if pkgNames.empty() {
-        io.ecprintln('{r}Please provide a (list of) package(s) to fetch info for{0}');
-        feral.exit(1);
-    }
-    if !pkg.info(pkgNames) {
-        feral.exit(1);
-    }
-} elif task == 'list' || task == 'l' {
-    # optionally takes pkgNames and searches in the list for package names that contain one of the pkgNames.
-    if !pkg.list(pkgNames) {
-        feral.exit(1);
-    }
+if cmd == 'init' {
+    if !pkgCreate.init(sub) { feral.exit(1); }
+} elif cmd == 'lock' {
+    if !pkgLock.handle(sub) { feral.exit(1); }
+} elif cmd == 'index' {
+    if !pkgIndex.handle(sub) { feral.exit(1); }
+} elif cmd == 'build' {
+    if !pkgCMake.handle(sub) { feral.exit(1); }
+} elif cmd == 'install' {
+    if !pkgInstall.handle(sub) { feral.exit(1); }
 } else {
-    io.eprintln('[ERROR] Invalid task: ', task, ' provided');
+    p.printHelp();
+    feral.exit(1);
 }

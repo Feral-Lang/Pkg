@@ -1,0 +1,12 @@
+let vec = import('std/vec');
+let package = import('std/package');
+
+let pkg = package.new(
+    name = 'Pkg',
+    desc = 'Feral package manager',
+    version = '0.0.1',
+    feral = '>=2.0.1',
+    authors = vec.new(
+        'Electrux'
+    )
+);

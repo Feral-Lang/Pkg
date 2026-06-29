@@ -1,0 +1,69 @@
+# Core variables/definitions
+
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+let fecl = import('std/fecl');
+let hashing = import('std/hashing');
+let logging = import('std/logging');
+
+let home = feral.libPath / 'pkg';
+let tmpRoot = feral.tempPath / 'pkg';
+let cacheRoot = home / 'cache';
+let indexRoot = home / 'indexes';
+let installRoot = home / 'installed';
+
+fs.mkdir(tmpRoot, cacheRoot, indexRoot, installRoot);
+
+let curlCmd = os.name == 'windows' ? os.findExec('curl.exe') : os.findExec('curl');
+let gitCmd = os.name == 'windows' ? os.findExec('git.exe') : os.findExec('git');
+let tarCmd = os.name == 'windows' ? os.findExec('tar.exe') : os.findExec('tar');
+
+if curlCmd == nil {
+    raise('FATAL: Could not find curl in PATH. Please make sure curl is installed!');
+}
+if gitCmd == nil {
+    raise('FATAL: Could not find git in PATH. Please make sure git is installed!');
+}
+if tarCmd == nil {
+    raise('FATAL: Could not find tar in PATH. Please make sure tar is installed!');
+}
+
+let getPkgFromScriptIn = fn(dir) {
+    let scriptPath = getPkgScriptPath(dir);
+    if !fs.exists(scriptPath) {
+        logging.trace('[install] no package.fer found to install a package');
+        io.cprintln('{br}FATAL{0}: {y}No {c}package.fer{y} found in {c}', dir);
+        return nil;
+    }
+    let script = import(scriptPath.str().replace('.fer', ''));
+    if !script._hasAttr_('pkg') {
+        logging.trace('[core] no `pkg` variable found in package.fer');
+        io.cprintln('{br}FATAL{0}: {y}No {c}pkg {y}variable declared in {c}', scriptPath, '{0}!');
+        return nil;
+    }
+    return ref(script.pkg);
+};
+
+let getLockFromFileIn = fn(dir) {
+    let path = getPkgLockPath(dir);
+    if !fs.exists(path) {
+        logging.trace('[install] no package.lock found to install a package');
+        io.cprintln('{br}FATAL{0}: {y}No {c}package.lock{y} found in {c}', dir);
+        return nil;
+    }
+    return fecl.loads(fs.fopen(path, 'r').readAll());
+};
+
+let getPkgInstallPath = fn(name, vers) {
+    return installRoot / 'pkgs' / (name + '--' + vers);
+};
+
+let getPkgLockPath = fn(dir) {
+    return dir / 'package.lock';
+};
+
+let getPkgScriptPath = fn(dir) {
+    return dir / 'package.fer';
+};

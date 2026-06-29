@@ -1,0 +1,269 @@
+# Manage indexes used by the Package Manager
+# Each package in the index has following format (from latest to oldest):
+#   versions = [
+#       { version = '2.0.0', url = '...'; sha = '...'; };
+#       { version = '0.1.2', url = '...'; sha = '...'; };
+#       { version = '0.1.1', url = '...'; sha = '...'; };
+#       { version = '0.1.0', url = '...'; sha = '...'; };
+#   ];
+
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let map = import('std/map');
+let fecl = import('std/fecl');
+let time = import('std/time');
+let logging = import('std/logging');
+let version = import('std/version');
+
+let core = import('./core');
+
+let handle = fn(sub) {
+    let cmd = sub.getSubcmd();
+    let ssub = sub.getSubparser();
+
+    loadState();
+
+    if cmd == 'add' {
+        return add(ssub.getValue('url'));
+    } elif cmd == 'remove' {
+        return remove(ssub.getValue('url'));
+    } elif cmd == 'update' {
+        let url = ssub.getValue('url');
+        if url == '' {
+            return updateAll();
+        } else {
+            return update(url, urlToDir(url));
+        }
+    } elif cmd == 'list' {
+        return listAll();
+    }
+    return false;
+};
+
+# Get dir name from URL
+let urlToDir = fn(url) {
+    let s = url.replace('https://', '');
+    return core.indexRoot / s.lower().replace('/', '@');
+};
+
+# Get URL from dir path
+let dirToUrl = fn(dir) {
+    return 'https://' + dir.file().str().replace('@', '/');
+};
+
+let getPkgMetaPath = fn(indexPath, name) {
+    let n = name.lower();
+    return indexPath / 'pkgs' / n.sub(0, 1) / (n + '.fecl');
+};
+
+let add = fn(url) {
+    let dir = urlToDir(url);
+    logging.trace('[index] adding index with URL: ', url);
+    if fs.exists(dir) {
+        logging.trace('[index] index `', url, '` already exists at: ', dir);
+        io.cprintln('{br}FATAL{0}: {y}Index {c}', url, ' {y}already exists{0}!');
+        return false;
+    }
+    fs.mkdir(dir);
+    logging.trace('[index] cloning repository in: ', dir);
+    io.cprintln('{y}Cloning index repository {0}...');
+    let out = '';
+    let res = os.exec(out = out, core.gitCmd, 'clone', '--depth=1', url, dir.str(), '^2>&1');
+    if res != 0 {
+        logging.trace('[index] failed to clone repository, error:\n', out);
+        io.cprintln('{br}FATAL{0}: {y}Failed to clone index repository{0}!');
+        io.println(out);
+        return false;
+    }
+    let name = dir.file().str();
+    if !markIndexUpdated(name) { return false; }
+    logging.trace('[index] cloned repository in: ', dir);
+    io.cprintln('{g}Successfully added index {c}', url, '{0}!');
+    return true;
+};
+
+let remove = fn(url) {
+    let dir = urlToDir(url);
+    logging.trace('[index] removing index with URL: ', url);
+    if !fs.exists(dir) {
+        logging.trace('[index] index `', url, '` doesn\'t exist at: ', dir);
+        io.cprintln('{br}FATAL{0}: {y}Path for index {c}', url, ' {y}doesn\'t exist{0}!');
+        return false;
+    }
+    fs.remove(dir);
+    logging.trace('[index] removed repository in: ', dir);
+    io.cprintln('{g}Successfully removed index {c}', url, '{0}!');
+    return true;
+};
+
+let update = fn(url, dir) {
+    logging.trace('[index] updating index in: ', dir);
+    if !fs.exists(dir) {
+        logging.trace('[index] index `', url, '` doesn\'t exist at: ', dir);
+        io.cprintln('{br}FATAL{0}: {y}Path for index {c}', url, ' {y}doesn\'t exist{0}!');
+        return false;
+    }
+    logging.trace('[index] pulling repository in: ', dir);
+    io.cprintln('{y}Pulling index repository {0}...');
+    let out = '';
+    let res = os.exec(out = out, core.gitCmd, '-C', dir.str(), 'pull', '^2>&1');
+    if res != 0 {
+        logging.trace('[index] failed to pull repository, error:\n', out);
+        io.cprintln('{br}FATAL{0}: {y}Failed to update index repository{0}!');
+        io.println(out);
+        return false;
+    }
+    let name = dir.file().str();
+    if !markIndexUpdated(name) { return false; }
+    logging.trace('[index] pulled repository in: ', dir);
+    io.cprintln('{g}Successfully updated index {c}', url, '{0}!');
+    return true;
+};
+
+let updateAll = fn() {
+    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    logging.trace('[index] updating all indices');
+    if dirs.empty() {
+        logging.trace('[index] no index dir present to update');
+        io.cprintln('{g}No index setup in {c}', core.indexRoot, ' {g}to update{0}!');
+        return true;
+    }
+    io.cprintln('{y}Updating all {c}', dirs.len(), ' {y}repositories {0}...');
+    let failed = 0;
+    for dir in dirs.each() {
+        if !update(dirToUrl(dir), dir) { ++failed; }
+    }
+    if failed > 0 {
+        logging.trace('[index] failed to update ', failed, ' repositories');
+        io.cprintln('{br}FATAL{0}: {y}Failed to update {c}', failed, ' {y}index repositories{0}!');
+        return false;
+    }
+    logging.trace('[index] updated all repositories');
+    io.cprintln('{g}Successfully updated all repositories{0}!');
+    return true;
+};
+
+let listAll = fn() {
+    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    if dirs.empty() {
+        io.cprintln('{g}No index setup in {c}', core.indexRoot, ' {g}to list{0}!');
+        return true;
+    }
+    for d in dirs.each() {
+        io.cprintln('- {c}', dirToUrl(d), ' {0}=> {y}', d, '{0}');
+    }
+    return true;
+};
+
+let lookup = fn(name, .kw) {
+    let meta = lookupMeta(name);
+    return lookupInMeta(meta, name, kw...);
+};
+
+let lookupMeta = fn(name) {
+    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    logging.trace('[index] looking up ', name, ' in indexes');
+    if dirs.empty() {
+        logging.trace('[index] no index to lookup package: ', name);
+        io.cprintln('{g}No index setup in {c}', core.indexRoot, ' {g}to lookup{0}!');
+        return nil;
+    }
+    for d in dirs.each() {
+        let metaPath = getPkgMetaPath(d, name);
+        if !fs.exists(metaPath) { continue; }
+        logging.trace('[index] found metadata for ', name, ' in index ', dirToUrl(d));
+        let meta = fs.fopen(metaPath, 'r').readAll();
+        return fecl.loads(meta);
+    }
+    logging.trace('[index] could not find metadata for ', name);
+    return nil;
+};
+
+let lookupInMeta = fn(meta, name, .kw) {
+    if meta == nil { return nil; }
+    let versions = ref(meta['versions']);
+    if versions == nil || versions.empty() { return nil; }
+    let vers = kw['version'];
+    let constraint = kw['constraint'];
+    let current = kw['current'] ?? false;
+    if vers != nil {
+        for v in versions.each() {
+            if v.version == vers { return v; }
+        }
+        logging.trace('[index] could not find ', name, '@', vers);
+        return nil;
+    }
+    if constraint != nil {
+        let all = kw['all'] ?? false;
+        let res = vec.new(refs = true);
+        for v in versions.each() {
+            let vObj = version.parse(v.version);
+            if constraint.matches(vObj) { res.push(v); }
+        }
+        if res.empty() {
+            logging.trace('[index] could not find ', name, ' with constraint: ', constraint);
+            return nil;
+        }
+        return all ? res : res[0];
+    }
+    if current { return versions[0]; }
+    return versions;
+};
+
+####################################################################################################
+############################################ State #################################################
+####################################################################################################
+
+let statePath = core.indexRoot / 'state.fecl';
+let stateUpdateInterval = time.to(time.second, days = 7);
+
+let state = map.new();
+
+let loadState = fn() {
+    if !fs.exists(statePath) {
+        return true;
+    }
+    state = fecl.loads(fs.fopen(statePath, 'r').readAll());
+    logging.trace('[index] loaded state from: ', statePath, '; indexes: ', state.len());
+    return true;
+};
+
+let saveState = fn() {
+    let f = fs.fopen(statePath, 'w+');
+    io.fprintln(f, fecl.dumps(state, 0, '    '));
+    logging.trace('[index] saved state to: ', statePath);
+    return true;
+};
+
+let isAnyIndexNotUpdated = fn() {
+    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS, nameOnly = true);
+    logging.trace('[index] checking if any index is not updated');
+    if dirs.empty() {
+        logging.trace('[index] no index present to check');
+        return true;
+    }
+    for indexStr in dirs.each() {
+        if !isIndexUpdated(indexStr) { return true; }
+    }
+    return false;
+};
+
+let isIndexUpdated = fn(indexStr) {
+    if !state.find(indexStr) {
+        state.insert(indexStr, 0);
+        saveState();
+        return false;
+    }
+    let nowSec = time.resolve(time.now(), time.second).int();
+    return nowSec - state[indexStr] < stateUpdateInterval;
+};
+
+let markIndexUpdated = fn(indexStr) {
+    if !state.find(indexStr) {
+        state.insert(indexStr, 0);
+    }
+    state[indexStr] = time.resolve(time.now(), time.second).int();
+    saveState();
+    return true;
+};
