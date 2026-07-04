@@ -1,11 +1,10 @@
 # Core variables/definitions
 
-let io = import('std/io');
 let fs = import('std/fs');
 let os = import('std/os');
+let map = import('std/map');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
-let hashing = import('std/hashing');
 let logging = import('std/logging');
 
 let home = feral.libPath / 'pkg';
@@ -30,34 +29,114 @@ if tarCmd == nil {
     raise('FATAL: Could not find tar in PATH. Please make sure tar is installed!');
 }
 
-let getPkgFromScriptIn = fn(dir) {
-    let scriptPath = getPkgScriptPath(dir);
-    if !fs.exists(scriptPath) {
-        logging.trace('[install] no package.fer found to install a package');
-        io.cprintln('{br}FATAL{0}: {y}No {c}package.fer{y} found in {c}', dir);
-        return nil;
+####################################################################################################
+########################################## Handlers ################################################
+####################################################################################################
+
+let handlers = map.new(refs = true);
+
+let handle = fn(.kw, key, args...) {
+    let handler = ref(handlers[key]);
+    if handler == nil {
+        raise('No handler for ', key, ' exists');
     }
-    let script = import(scriptPath.str().replace('.fer', ''));
-    if !script._hasAttr_('pkg') {
-        logging.trace('[core] no `pkg` variable found in package.fer');
-        io.cprintln('{br}FATAL{0}: {y}No {c}pkg {y}variable declared in {c}', scriptPath, '{0}!');
-        return nil;
-    }
-    return ref(script.pkg);
+    return handler(args..., kw...);
 };
 
-let getLockFromFileIn = fn(dir) {
+let setHandler = fn(key, handler) {
+    handlers.insert(key, handler);
+};
+
+let hasHandler = fn(key) {
+    return handlers.find(key);
+};
+
+####################################################################################################
+########################################## Utilities ###############################################
+####################################################################################################
+
+"
+  fn(name, vers, url, hash, force = false) -> Result<Path>
+Downloads and extracts the archive from `url`, returning the result which wraps the path where
+the archive was extracted. Deletes the archive once extracted.
+"
+let downloadAndExtract = fn(name, vers, url, hash, force = false) {
+    let outDir = getPkgTempPath(name, vers);
+    logging.info('[downloadAndExtract] downloading `', name, '@', vers, '` ...');
+    let _ = logging.ScopedDepth();
+    if fs.exists(outDir) {
+        logging.debug('[downloadAndExtract] pkgTempPath `', outDir, '` already exists!');
+        if !force { return feral.ok(outDir); }
+        fs.remove(outDir);
+    }
+    let archivePath = getPkgArchivePath(name, vers);
+    let archiveName = archivePath.file();
+    if fs.exists(archivePath) {
+        let actualHash = hashing.sha256File(archivePath);
+        logging.debug('[downloadAndExtract] checking hash, expected: `', hash, '`, found: `', actualHash, '`');
+        if actualHash != hash { fs.remove(archivePath); }
+    }
+    if !fs.exists(archivePath) {
+        logging.info('fetching (via curl) ', name, '@', vers, ' ...');
+        let out = '';
+        if os.exec(out = out, curlCmd, '-sSL', '--output-dir', archivePath.parent(), url, '-o', archiveName) != 0 {
+            return feral.err(-1, 'failed to download ', name, '@', vers, ' from `', url, '`:\n', out);
+        }
+    }
+    let actualHash = hashing.sha256File(archivePath);
+    if actualHash != hash {
+        return feral.err(-1, 'hash mismatch when downloading ', name, '@', vers, '; given: `', hash, '`, actual: `', actualHash, '`');
+    }
+    fs.mkdir(outDir);
+    let out = '';
+    if os.exec(out = out, tarCmd, '--strip-components=1', '-C', outDir, '-x', '-f', archivePath, '^2>&1') != 0 {
+        return feral.err(-1, 'failed to extract `', archivePath, '`:\n', out);
+    }
+    fs.remove(archivePath);
+    return feral.ok(outDir);
+};
+
+let isPkgManuallyInstalled = fn(dir) {
+    for e in feral.moduleDirs.each() {
+        if e == dir { return true; }
+    }
+    return false;
+};
+
+let loadPkgScriptIn = fn(dir, configInfo) {
+    let scriptPath = getPkgScriptPath(dir);
+    if !fs.exists(scriptPath) {
+        return feral.err(-1, 'could not find package script `', scriptPath, '`');
+    }
+    let script = import(scriptPath.str().replace('.fer', ''));
+    if !script._hasAttr_('configure') {
+        return feral.err(-1, 'could not find a function `configure(configInfo)` in script `', scriptPath, '`');
+    }
+    return script.configure(configInfo);
+};
+
+let loadLockFileIn = fn(dir) {
     let path = getPkgLockPath(dir);
     if !fs.exists(path) {
-        logging.trace('[install] no package.lock found to install a package');
-        io.cprintln('{br}FATAL{0}: {y}No {c}package.lock{y} found in {c}', dir);
-        return nil;
+        return feral.err(-1, 'could not find package lock file `', path, '`');
     }
-    return fecl.loads(fs.fopen(path, 'r').readAll());
+    return feral.ok(fecl.loads(fs.fopen(path, 'r').readAll()));
+};
+
+let getPkgCachePath = fn(name, vers) {
+    return cacheRoot / (name.lower() + '--' + vers);
 };
 
 let getPkgInstallPath = fn(name, vers) {
-    return installRoot / 'pkgs' / (name.lower() + '--' + vers);
+    return installRoot / (name.lower() + '--' + vers);
+};
+
+let getPkgTempPath = fn(name, vers) {
+    return tmpRoot / (name.lower() + '--' + vers);
+};
+
+let getPkgArchivePath = fn(name, vers) {
+    return tmpRoot / (name.lower() + vers + '.zip');
 };
 
 let getPkgLockPath = fn(dir) {

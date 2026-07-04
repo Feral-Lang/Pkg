@@ -14,7 +14,6 @@ let map = import('std/map');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
 let time = import('std/time');
-let logging = import('std/logging');
 let version = import('std/version');
 
 let core = import('./core');
@@ -42,45 +41,23 @@ let handle = fn(sub) {
     return false;
 };
 
-# Get dir name from URL
-let urlToDir = fn(url) {
-    let s = url.replace('https://', '');
-    return core.indexRoot / s.lower().replace('/', '@');
-};
-
-# Get URL from dir path
-let dirToUrl = fn(dir) {
-    return 'https://' + dir.file().str().replace('@', '/');
-};
-
-let getPkgMetaPath = fn(indexPath, name) {
-    let n = name.lower();
-    return indexPath / 'pkgs' / n.sub(0, 1) / (n + '.fecl');
-};
+core.setHandler('index', handle);
 
 let add = fn(url) {
     let dir = urlToDir(url);
-    logging.trace('[index] adding index with URL: ', url);
     if fs.exists(dir) {
-        logging.trace('[index] index `', url, '` already exists at: ', dir);
-        io.cprintln('{br}FATAL{0}: {y}Index {c}', url, ' {y}already exists{0}!');
-        return false;
+        return feral.err(0, 'index `', url, '` already exists');
     }
     fs.mkdir(dir);
-    logging.trace('[index] cloning repository in: ', dir);
-    io.cprintln('{y}Cloning index repository {0}...');
+    io.println('cloning index repository ...');
     let out = '';
     let res = os.exec(out = out, core.gitCmd, 'clone', '--depth=1', url, dir.str(), '^2>&1');
     if res != 0 {
-        logging.trace('[index] failed to clone repository, error:\n', out);
-        io.cprintln('{br}FATAL{0}: {y}Failed to clone index repository{0}!');
-        io.println(out);
-        return false;
+        return feral.err(res, 'failed to clone index repository:\n', out);
     }
     let name = dir.file().str();
-    if !markIndexUpdated(name) { return false; }
-    logging.trace('[index] cloned repository in: ', dir);
-    io.cprintln('{g}Successfully added index {c}', url, '{0}!');
+    if !markIndexUpdated(name) { return feral.err(-1, 'failed to mark index in `', dir, '` as updated'); }
+    io.cprintln('successfully added index ', url, '!');
     return true;
 };
 
@@ -268,4 +245,24 @@ let markIndexUpdated = fn(indexStr) {
     state[indexStr] = time.resolve(time.now(), time.second).int();
     saveState();
     return true;
+};
+
+####################################################################################################
+########################################## Utilities ###############################################
+####################################################################################################
+
+# Get dir name from URL
+let urlToDir = fn(url) {
+    let s = url.replace('https://', '');
+    return core.indexRoot / s.lower().replace('/', '@');
+};
+
+# Get URL from dir path
+let dirToUrl = fn(dir) {
+    return 'https://' + dir.file().str().replace('@', '/');
+};
+
+let getPkgMetaPath = fn(indexPath, name) {
+    let n = name.lower();
+    return indexPath / 'pkgs' / n.sub(0, 1) / (n + '.fecl');
 };

@@ -3,10 +3,9 @@ let logging = import('std/logging');
 let argparse = import('std/argparse');
 
 let pkgCore = import('../lib/core');
+let pkgInit = import('../lib/init');
 let pkgLock = import('../lib/lock');
-#let pkgCMake = import('../lib/cmake');
 let pkgIndex = import('../lib/index');
-let pkgCreate = import('../lib/create');
 let pkgInstall = import('../lib/install');
 
 let p = argparse.new('Pkg', 'The Feral package manager');
@@ -21,9 +20,6 @@ initSub.addOpt('author').addOpts('--author').setHelp('Author "Name <email>" (def
 initSub.addOpt('desc').addOpts('--desc').setDefault('TODO: add description').setHelp('Short package description');
 
 subs.add('lock', 'Resolve dependencies and generate package.lock');
-
-let buildSub = subs.add('build', 'Build the package (using CMake) in given or current directory');
-buildSub.addPos('dir').setHelp('Package directory (default: current directory)');
 
 let installSub = subs.add('install', 'Install a package and all dependencies from package.fer / package.lock');
 installSub.addPos('name').setNargs(-1).setReqd(false).setHelp('Package name (omit to install from package.fer)');
@@ -51,17 +47,8 @@ let logFilePath = pkgCore.tmpRoot / 'feralPkg.log';
 logging.addTargetByPath(logFilePath, logging.Levels.TRACE, false);
 io.println('Writing full logs to: ', logFilePath);
 
-if cmd == 'init' {
-    if !pkgCreate.init(sub) { feral.exit(1); }
-} elif cmd == 'lock' {
-    if !pkgLock.handle(sub) { feral.exit(1); }
-} elif cmd == 'index' {
-    if !pkgIndex.handle(sub) { feral.exit(1); }
-} elif cmd == 'build' {
-    if !pkgCMake.handle(sub) { feral.exit(1); }
-} elif cmd == 'install' {
-    if !pkgInstall.handle(sub) { feral.exit(1); }
-} else {
+if !pkgCore.hasHandler(cmd) {
     p.printHelp();
     feral.exit(1);
 }
+if !pkgCore.handle(cmd, sub) { feral.exit(1); }
