@@ -3,6 +3,7 @@
 let io = import('std/io');
 let fs = import('std/fs');
 let os = import('std/os');
+let map = import('std/map');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
 let hashing = import('std/hashing');
@@ -29,6 +30,39 @@ if gitCmd == nil {
 if tarCmd == nil {
     raise('FATAL: Could not find tar in PATH. Please make sure tar is installed!');
 }
+
+####################################################################################################
+########################################## Handlers ################################################
+####################################################################################################
+
+let handlers = map.new(refs = true);
+
+let handle = fn(.kw, key, args...) {
+    let handler = ref(handlers[key]);
+    if handler == nil {
+        raise('No handler for ', key, ' exists');
+    }
+    return handler(args..., kw...);
+};
+
+let setHandler = fn(key, handler) {
+    handlers.insert(key, handler);
+};
+
+let hasHandler = fn(key) {
+    return handlers.find(key);
+};
+
+####################################################################################################
+########################################## Utilities ###############################################
+####################################################################################################
+
+let isPkgManuallyInstalled = fn(dir) {
+    for e in feral.moduleDirs.each() {
+        if e == dir { return true; }
+    }
+    return false;
+};
 
 let getPkgFromScriptIn = fn(dir) {
     let scriptPath = getPkgScriptPath(dir);

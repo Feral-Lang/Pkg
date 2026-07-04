@@ -42,6 +42,8 @@ let handle = fn(sub) {
     return false;
 };
 
+core.setHandler('index', handle);
+
 # Get dir name from URL
 let urlToDir = fn(url) {
     let s = url.replace('https://', '');
