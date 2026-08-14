@@ -13,6 +13,7 @@ let os = import('std/os');
 let map = import('std/map');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
+let term = import('std/term');
 let time = import('std/time');
 let version = import('std/version');
 
@@ -41,136 +42,179 @@ let handle = fn(sub) {
     return false;
 };
 
-core.setHandler('index', handle);
-
 let add = fn(url) {
+    let _ = core.logger.scopedTag('indexAdd');
     let dir = urlToDir(url);
     if fs.exists(dir) {
-        return feral.err(0, 'index `', url, '` already exists');
+        core.logger.info('index `', url, '` already exists!');
+        io.cprintln('{g}index {c}', url, '{g} already exists{0}!');
+        return true;
     }
     fs.mkdir(dir);
-    io.println('cloning index repository ...');
-    let out = '';
+    core.logger.trace('cloning index repository `', url, '`');
+    io.cprint('{y}cloning index repository {0}... ');
+    io.fflush(io.stdout);
+    let out = vec.new(refs = true);
     let res = os.exec(out = out, core.gitCmd, 'clone', '--depth=1', url, dir.str(), '^2>&1');
     if res != 0 {
-        return feral.err(res, 'failed to clone index repository:\n', out);
+        core.logger.fatal('failed to clone index repository:');
+        io.println();
+        io.cprintln('{br}FATAL{0}: {y}failed to clone index repository{0}:');
+        let _ = core.logger.ScopedDepth();
+        for o in out.each() {
+            core.logger.fatal(o);
+            io.println('- ', o);
+        }
+        return false;
     }
     let name = dir.file().str();
-    if !markIndexUpdated(name) { return feral.err(-1, 'failed to mark index in `', dir, '` as updated'); }
-    io.cprintln('successfully added index ', url, '!');
+    if !markIndexUpdated(name) {
+        core.logger.fatal('failed to mark index in `', dir, '` as updated');
+        io.println();
+        io.cprintln('{br}FATAL{0}: {y}failed to mark index in {c}', dir, ' {y}as updated{0}!');
+        return false;
+    }
+    core.logger.info('index `', url, '` added successfully!');
+    io.cprintln('{g}success{0}!');
     return true;
 };
 
 let remove = fn(url) {
+    let _ = core.logger.scopedTag('indexRemove');
     let dir = urlToDir(url);
-    logging.trace('[index] removing index with URL: ', url);
+    core.logger.info('removing index with url `', url, '`');
+    io.cprint('{y}removing index {c}', url, ' {0}... ');
     if !fs.exists(dir) {
-        logging.trace('[index] index `', url, '` doesn\'t exist at: ', dir);
-        io.cprintln('{br}FATAL{0}: {y}Path for index {c}', url, ' {y}doesn\'t exist{0}!');
+        core.logger.info('index `', url, '` does not exist at `', dir, '`');
+        io.println();
+        io.cprintln('{br}FATAL{0}: {y}path for index {c}', url, ' {y}does not exist{0}!');
         return false;
     }
     fs.remove(dir);
-    logging.trace('[index] removed repository in: ', dir);
-    io.cprintln('{g}Successfully removed index {c}', url, '{0}!');
+    core.logger.info('removed repository in `', dir, '`');
+    io.cprintln('{g}success{0}!');
     return true;
 };
 
 let update = fn(url, dir) {
-    logging.trace('[index] updating index in: ', dir);
+    let _ = core.logger.scopedTag('indexUpdate');
+    core.logger.info('updating index in `', dir, '`');
+    io.cprint('{y}updating index {c}', url, ' {0}... ');
     if !fs.exists(dir) {
-        logging.trace('[index] index `', url, '` doesn\'t exist at: ', dir);
-        io.cprintln('{br}FATAL{0}: {y}Path for index {c}', url, ' {y}doesn\'t exist{0}!');
+        core.logger.fatal('index `', url, '` does not exist at `', dir, '`');
+        io.println();
+        io.cprintln('{br}FATAL{0}: {y}path for index {c}', url, ' {y}does not exist{0}!');
         return false;
     }
-    logging.trace('[index] pulling repository in: ', dir);
-    io.cprintln('{y}Pulling index repository {0}...');
-    let out = '';
+    core.logger.debug('pulling repository in ', dir);
+    let out = vec.new(refs = true);
     let res = os.exec(out = out, core.gitCmd, '-C', dir.str(), 'pull', '^2>&1');
     if res != 0 {
-        logging.trace('[index] failed to pull repository, error:\n', out);
-        io.cprintln('{br}FATAL{0}: {y}Failed to update index repository{0}!');
-        io.println(out);
+        core.logger.fatal('failed to pull repository, error:');
+        let _ = core.logger.ScopedDepth();
+        for o in out.each() {
+            core.logger.fatal(o);
+        }
+        io.println();
+        io.cprintln('{br}FATAL{0}: {y}failed to update index repository{0}, {y}error{0}:');
+        io.println(out.join('\n'));
         return false;
     }
     let name = dir.file().str();
-    if !markIndexUpdated(name) { return false; }
-    logging.trace('[index] pulled repository in: ', dir);
-    io.cprintln('{g}Successfully updated index {c}', url, '{0}!');
+    if !markIndexUpdated(name) {
+        core.logger.fatal('failed to mark the index as updated');
+        io.println();
+        io.println('{br}FATAL{0}: {y}failed to mark the index as updated{0}!');
+        return false;
+    }
+    core.logger.info('pulled repository in `', dir, '`');
+    io.cprintln('{g}success{0}!');
     return true;
 };
 
 let updateAll = fn() {
+    let _ = core.logger.scopedTag('indexUpdateAll');
     let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
-    logging.trace('[index] updating all indices');
+    core.logger.info('updating all indices');
+    io.cprintln('{y}updating all indices {0}... ');
     if dirs.empty() {
-        logging.trace('[index] no index dir present to update');
-        io.cprintln('{g}No index setup in {c}', core.indexRoot, ' {g}to update{0}!');
+        core.logger.info('no index directory present to update');
+        io.cprintln('{g}no index setup in {c}', core.indexRoot, ' {g}to update{0}!');
         return true;
     }
-    io.cprintln('{y}Updating all {c}', dirs.len(), ' {y}repositories {0}...');
     let failed = 0;
     for dir in dirs.each() {
+        io.print('- ');
         if !update(dirToUrl(dir), dir) { ++failed; }
     }
     if failed > 0 {
-        logging.trace('[index] failed to update ', failed, ' repositories');
-        io.cprintln('{br}FATAL{0}: {y}Failed to update {c}', failed, ' {y}index repositories{0}!');
+        core.logger.fatal('failed to update `', failed, '` repositories');
+        io.cprintln('{br}FATAL{0}: {y}failed to update {c}', failed, ' {y}index repositories{0}!');
         return false;
     }
-    logging.trace('[index] updated all repositories');
-    io.cprintln('{g}Successfully updated all repositories{0}!');
+    core.logger.info('update all repositories');
+    io.cprintln('{g}successfully updated all repositories{0}!');
     return true;
 };
 
 let listAll = fn() {
+    let _ = core.logger.scopedTag('indexListAll');
     let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    core.logger.info('listing all `', dirs.len(), '` indices');
     if dirs.empty() {
-        io.cprintln('{g}No index setup in {c}', core.indexRoot, ' {g}to list{0}!');
+        core.logger.warn('no index setup in `', core.indexRoot, '` to list!');
+        io.cprintln('{y}no index setup in {c}', core.indexRoot, ' {y}to list{0}!');
         return true;
     }
+    let __ = core.logger.scopedDepth();
     for d in dirs.each() {
-        io.cprintln('- {c}', dirToUrl(d), ' {0}=> {y}', d, '{0}');
+        core.logger.info(dirToUrl(d), ' => ', d);
+        io.cprintln('- {c}', dirToUrl(d), '{0} => {y}', d, '{0}');
     }
     return true;
 };
 
 let lookup = fn(name, .kw) {
-    let meta = lookupMeta(name);
+    let meta = lookupMeta(name).?;
     return lookupInMeta(meta, name, kw...);
 };
 
 let lookupMeta = fn(name) {
+    let _ = core.logger.scopedTag('indexLookupMeta');
     let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
-    logging.trace('[index] looking up ', name, ' in indexes');
+    core.logger.info('looking up ', name, ' in indexes');
     if dirs.empty() {
-        logging.trace('[index] no index to lookup package: ', name);
-        io.cprintln('{g}No index setup in {c}', core.indexRoot, ' {g}to lookup{0}!');
-        return nil;
+        core.logger.warn('[indexLookupMeta] no index available to lookup package: ', name);
+        return feral.err(-1, 'no index available to lookup package');
     }
     for d in dirs.each() {
         let metaPath = getPkgMetaPath(d, name);
         if !fs.exists(metaPath) { continue; }
-        logging.trace('[index] found metadata for ', name, ' in index ', dirToUrl(d));
+        core.logger.trace('found metadata for ', name, ' in index ', dirToUrl(d));
         let meta = fs.fopen(metaPath, 'r').readAll();
-        return fecl.loads(meta);
+        return feral.ok(fecl.loads(meta));
     }
-    logging.trace('[index] could not find metadata for ', name);
-    return nil;
+    core.logger.fatal('could not find metadata for ', name);
+    return feral.err(-1, 'could not find metadata');
 };
 
 let lookupInMeta = fn(meta, name, .kw) {
-    if meta == nil { return nil; }
+    let _ = core.logger.scopedTag('indexLookupInMeta');
+    if meta == nil { raise('provided `meta` is `nil`'); }
     let versions = ref(meta['versions']);
-    if versions == nil || versions.empty() { return nil; }
+    if versions == nil || versions.empty() {
+        core.logger.fatal('no version info available in metadata for `', name, '`');
+        return feral.err(-1, 'no versions info available in meta');
+    }
     let vers = kw['version'];
     let constraint = kw['constraint'];
     let current = kw['current'] ?? false;
     if vers != nil {
         for v in versions.each() {
-            if v.version == vers { return v; }
+            if v.version == vers { return feral.ok(v); }
         }
-        logging.trace('[index] could not find ', name, '@', vers);
-        return nil;
+        core.logger.fatal('could not find `', name, '@', vers, '` in metadata');
+        return feral.err(-1, 'could not find package `', name, '@', vers, '` in metadata');
     }
     if constraint != nil {
         let all = kw['all'] ?? false;
@@ -181,13 +225,12 @@ let lookupInMeta = fn(meta, name, .kw) {
             if cons.matches(vObj) { res.push(v); }
         }
         if res.empty() {
-            logging.trace('[index] could not find ', name, ' with constraint: ', constraint);
-            return nil;
+            core.logger.fatal('could not find ', name, ' with constraint ', constraint);
+            return feral.err(-1, 'could not find package `', name, '` satisfying constraint `', constraint, '`');
         }
-        return all ? res : res[0];
+        return feral.ok(all ? res : res[0]);
     }
-    if current { return versions[0]; }
-    return versions;
+    return feral.ok(current ? versions[0] : versions);
 };
 
 ####################################################################################################
@@ -200,26 +243,30 @@ let stateUpdateInterval = time.to(time.second, days = 7);
 let state = map.new();
 
 let loadState = fn() {
+    let _ = core.logger.scopedTag('indexLoadState');
     if !fs.exists(statePath) {
+        core.logger.debug('no state currently exists at `', statePath, '`');
         return true;
     }
     state = fecl.loads(fs.fopen(statePath, 'r').readAll());
-    logging.trace('[index] loaded state from: ', statePath, '; indexes: ', state.len());
+    core.logger.info('loaded state from `', statePath, '`; indices: ', state.len());
     return true;
 };
 
 let saveState = fn() {
+    let _ = core.logger.scopedTag('indexSaveState');
     let f = fs.fopen(statePath, 'w+');
     io.fprintln(f, fecl.dumps(state, 0, '    '));
-    logging.trace('[index] saved state to: ', statePath);
+    core.logger.info('saved state to `', statePath, '`');
     return true;
 };
 
 let isAnyIndexNotUpdated = fn() {
+    let _ = core.logger.scopedTag('indexIsAnyIndexNotUpdated');
     let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS, nameOnly = true);
-    logging.trace('[index] checking if any index is not updated');
+    core.logger.info('checking if any index is not updated');
     if dirs.empty() {
-        logging.trace('[index] no index present to check');
+        core.logger.warn('no index present to check');
         return true;
     }
     for indexStr in dirs.each() {

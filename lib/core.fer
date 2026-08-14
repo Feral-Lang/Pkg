@@ -15,6 +15,8 @@ let installRoot = home / 'installed';
 
 fs.mkdir(tmpRoot, cacheRoot, indexRoot, installRoot);
 
+let logFile = tmpRoot / 'pkg.log';
+
 let curlCmd = os.name == 'windows' ? os.findExec('curl.exe') : os.findExec('curl');
 let gitCmd = os.name == 'windows' ? os.findExec('git.exe') : os.findExec('git');
 let tarCmd = os.name == 'windows' ? os.findExec('tar.exe') : os.findExec('tar');
@@ -30,25 +32,14 @@ if tarCmd == nil {
 }
 
 ####################################################################################################
-########################################## Handlers ################################################
+########################################## Logging #################################################
 ####################################################################################################
 
-let handlers = map.new(refs = true);
+let logger = logging.newLogger();
+logger.addTargetByPath(logFile);
 
-let handle = fn(.kw, key, args...) {
-    let handler = ref(handlers[key]);
-    if handler == nil {
-        raise('No handler for ', key, ' exists');
-    }
-    return handler(args..., kw...);
-};
-
-let setHandler = fn(key, handler) {
-    handlers.insert(key, handler);
-};
-
-let hasHandler = fn(key) {
-    return handlers.find(key);
+let setLogger = fn(newLogger) {
+    feral.varReplace('logger', ref(newLogger));
 };
 
 ####################################################################################################
@@ -61,11 +52,12 @@ Downloads and extracts the archive from `url`, returning the result which wraps 
 the archive was extracted. Deletes the archive once extracted.
 "
 let downloadAndExtract = fn(name, vers, url, hash, force = false) {
+    let _ = logger.scopedTag('downloadAndExtract');
     let outDir = getPkgTempPath(name, vers);
-    logging.info('[downloadAndExtract] downloading `', name, '@', vers, '` ...');
+    logger.debug('downloading `', name, '@', vers, '` ...');
     let _ = logging.ScopedDepth();
     if fs.exists(outDir) {
-        logging.debug('[downloadAndExtract] pkgTempPath `', outDir, '` already exists!');
+        logger.info('pkgTempPath `', outDir, '` already exists!');
         if !force { return feral.ok(outDir); }
         fs.remove(outDir);
     }
@@ -73,23 +65,34 @@ let downloadAndExtract = fn(name, vers, url, hash, force = false) {
     let archiveName = archivePath.file();
     if fs.exists(archivePath) {
         let actualHash = hashing.sha256File(archivePath);
-        logging.debug('[downloadAndExtract] checking hash, expected: `', hash, '`, found: `', actualHash, '`');
+        logger.info('checking hash, expected: `', hash, '`, found: `', actualHash, '`; will download again!');
         if actualHash != hash { fs.remove(archivePath); }
     }
     if !fs.exists(archivePath) {
-        logging.info('fetching (via curl) ', name, '@', vers, ' ...');
+        logger.trace('fetching (via curl) ', name, '@', vers, ' ...');
         let out = '';
         if os.exec(out = out, curlCmd, '-sSL', '--output-dir', archivePath.parent(), url, '-o', archiveName) != 0 {
+            logger.fatal('failed to download ', name, '@', vers, ' from `', url, '`:');
+            let _ = logger.scopedDepth();
+            for o in out.split('\n').each() {
+                logger.fatal(o);
+            }
             return feral.err(-1, 'failed to download ', name, '@', vers, ' from `', url, '`:\n', out);
         }
     }
     let actualHash = hashing.sha256File(archivePath);
     if actualHash != hash {
+        logger.fatal('hash mismatch when downloading ', name, '@', vers, '; given: `', hash, '`, actual: `', actualHash, '`');
         return feral.err(-1, 'hash mismatch when downloading ', name, '@', vers, '; given: `', hash, '`, actual: `', actualHash, '`');
     }
     fs.mkdir(outDir);
     let out = '';
     if os.exec(out = out, tarCmd, '--strip-components=1', '-C', outDir, '-x', '-f', archivePath, '^2>&1') != 0 {
+        logger.fatal('failed to extract `', archivePath, '`:');
+        let _ = logger.scopedDepth();
+        for o in out.split('\n').each() {
+            logger.fatal(o);
+        }
         return feral.err(-1, 'failed to extract `', archivePath, '`:\n', out);
     }
     fs.remove(archivePath);
@@ -104,20 +107,27 @@ let isPkgManuallyInstalled = fn(dir) {
 };
 
 let loadPkgScriptIn = fn(dir, configInfo) {
+    let _ = logger.scopedTag('loadPkgScriptIn');
     let scriptPath = getPkgScriptPath(dir);
+    logger.trace('loading package script `', scriptPath, '`');
     if !fs.exists(scriptPath) {
+        logger.fatal('could not find package script `', scriptPath, '`');
         return feral.err(-1, 'could not find package script `', scriptPath, '`');
     }
     let script = import(scriptPath.str().replace('.fer', ''));
     if !script._hasAttr_('configure') {
+        logger.fatal('could not find a function `configure(configInfo)` in script `', scriptPath, '`');
         return feral.err(-1, 'could not find a function `configure(configInfo)` in script `', scriptPath, '`');
     }
     return script.configure(configInfo);
 };
 
 let loadLockFileIn = fn(dir) {
+    let _ = logger.scopedTag('loadLockFileIn');
     let path = getPkgLockPath(dir);
+    logger.trace('loading lock file in `', path, '`');
     if !fs.exists(path) {
+        logger.fatal('could not find package lock file `', path, '`');
         return feral.err(-1, 'could not find package lock file `', path, '`');
     }
     return feral.ok(fecl.loads(fs.fopen(path, 'r').readAll()));

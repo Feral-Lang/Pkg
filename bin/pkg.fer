@@ -3,10 +3,9 @@ let logging = import('std/logging');
 let argparse = import('std/argparse');
 
 let pkgCore = import('../lib/core');
-let pkgInit = import('../lib/init');
-let pkgLock = import('../lib/lock');
-let pkgIndex = import('../lib/index');
-let pkgInstall = import('../lib/install');
+#let pkgInit = import('../lib/init');
+#let pkgLock = import('../lib/lock');
+#let pkgInstall = import('../lib/install');
 
 let p = argparse.new('Pkg', 'The Feral package manager');
 let subs = p.addSubparsers('command');
@@ -43,10 +42,10 @@ p.parse(feral.args);
 let cmd = p.getSubcmd();
 let sub = p.getSubparser();
 
-let logFilePath = pkgCore.tmpRoot / 'feralPkg.log';
-logging.addTargetByPath(logFilePath, logging.Levels.TRACE, false);
-io.println('Writing full logs to: ', logFilePath);
-
+if cmd == 'index' {
+    let pkgIndex = import('../lib/index');
+    feral.exit(pkgIndex.handle(sub) ? 0 : 1);
+}
 if !pkgCore.hasHandler(cmd) {
     p.printHelp();
     feral.exit(1);
