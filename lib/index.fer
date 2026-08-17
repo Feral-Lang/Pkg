@@ -15,6 +15,7 @@ let vec = import('std/vec');
 let fecl = import('std/fecl');
 let term = import('std/term');
 let time = import('std/time');
+let package = import('std/package');
 let version = import('std/version');
 
 let core = import('./core');
@@ -60,7 +61,7 @@ let add = fn(url) {
         core.logger.fatal('failed to clone index repository:');
         io.println();
         io.cprintln('{br}FATAL{0}: {y}failed to clone index repository{0}:');
-        let _ = core.logger.ScopedDepth();
+        let _ = core.logger.scopedDepth();
         for o in out.each() {
             core.logger.fatal(o);
             io.println('- ', o);
@@ -108,10 +109,10 @@ let update = fn(url, dir) {
     }
     core.logger.debug('pulling repository in ', dir);
     let out = vec.new(refs = true);
-    let res = os.exec(out = out, core.gitCmd, '-C', dir.str(), 'pull', '^2>&1');
+    let res = os.exec(out = out, core.gitCmd, '-C', dir.str(), 'pull', '-f', '--rebase', '^2>&1');
     if res != 0 {
         core.logger.fatal('failed to pull repository, error:');
-        let _ = core.logger.ScopedDepth();
+        let _ = core.logger.scopedDepth();
         for o in out.each() {
             core.logger.fatal(o);
         }
@@ -134,12 +135,12 @@ let update = fn(url, dir) {
 
 let updateAll = fn() {
     let _ = core.logger.scopedTag('indexUpdateAll');
-    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    let dirs = fs.walkDir(package.indexRoot, fs.WALK_DIRS);
     core.logger.info('updating all indices');
     io.cprintln('{y}updating all indices {0}... ');
     if dirs.empty() {
         core.logger.info('no index directory present to update');
-        io.cprintln('{g}no index setup in {c}', core.indexRoot, ' {g}to update{0}!');
+        io.cprintln('{g}no index setup in {c}', package.indexRoot, ' {g}to update{0}!');
         return true;
     }
     let failed = 0;
@@ -159,11 +160,11 @@ let updateAll = fn() {
 
 let listAll = fn() {
     let _ = core.logger.scopedTag('indexListAll');
-    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    let dirs = fs.walkDir(package.indexRoot, fs.WALK_DIRS);
     core.logger.info('listing all `', dirs.len(), '` indices');
     if dirs.empty() {
-        core.logger.warn('no index setup in `', core.indexRoot, '` to list!');
-        io.cprintln('{y}no index setup in {c}', core.indexRoot, ' {y}to list{0}!');
+        core.logger.warn('no index setup in `', package.indexRoot, '` to list!');
+        io.cprintln('{y}no index setup in {c}', package.indexRoot, ' {y}to list{0}!');
         return true;
     }
     let __ = core.logger.scopedDepth();
@@ -181,7 +182,7 @@ let lookup = fn(name, .kw) {
 
 let lookupMeta = fn(name) {
     let _ = core.logger.scopedTag('indexLookupMeta');
-    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS);
+    let dirs = fs.walkDir(package.indexRoot, fs.WALK_DIRS);
     core.logger.info('looking up ', name, ' in indexes');
     if dirs.empty() {
         core.logger.warn('[indexLookupMeta] no index available to lookup package: ', name);
@@ -233,11 +234,35 @@ let lookupInMeta = fn(meta, name, .kw) {
     return feral.ok(current ? versions[0] : versions);
 };
 
+let getInstalled = fn(name, .kw) {
+    let vers = kw['version'];
+    let constraint = kw['constraint'];
+    if vers != nil {
+        let v = lookup(name, version = vers).?;
+        let installPath = package.getInstallPath(name, v.version);
+        if fs.exists(installPath) { return feral.ok(v); }
+        return feral.err(-1, 'could not find package installation with required version');
+    }
+    if constraint != nil {
+        let versions = lookup(name, constraint = constraint, all = true).?;
+        for v in versions.each() {
+            if fs.exists(package.getInstallPath(name, v.version)) { return feral.ok(v); }
+        }
+        return feral.err(-1, 'could not find package installation with required constraint');
+    }
+    let versions = lookup(name).?;
+    for v in versions.each() {
+        let installPath = package.getInstallPath(name, v.version);
+        if fs.exists(installPath) { return feral.ok(v); }
+    }
+    return feral.err(-1, 'could not find package installation with any version');
+};
+
 ####################################################################################################
 ############################################ State #################################################
 ####################################################################################################
 
-let statePath = core.indexRoot / 'state.fecl';
+let statePath = package.indexRoot / 'state.fecl';
 let stateUpdateInterval = time.to(time.second, days = 7);
 
 let state = map.new();
@@ -263,7 +288,7 @@ let saveState = fn() {
 
 let isAnyIndexNotUpdated = fn() {
     let _ = core.logger.scopedTag('indexIsAnyIndexNotUpdated');
-    let dirs = fs.walkDir(core.indexRoot, fs.WALK_DIRS, nameOnly = true);
+    let dirs = fs.walkDir(package.indexRoot, fs.WALK_DIRS, nameOnly = true);
     core.logger.info('checking if any index is not updated');
     if dirs.empty() {
         core.logger.warn('no index present to check');
@@ -301,7 +326,7 @@ let markIndexUpdated = fn(indexStr) {
 # Get dir name from URL
 let urlToDir = fn(url) {
     let s = url.replace('https://', '');
-    return core.indexRoot / s.lower().replace('/', '@');
+    return package.indexRoot / s.lower().replace('/', '@');
 };
 
 # Get URL from dir path

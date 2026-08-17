@@ -1,0 +1,96 @@
+# Lists all installed packages
+
+let io = import('std/io');
+let fs = import('std/fs');
+let map = import('std/map');
+let vec = import('std/vec');
+let package = import('std/package');
+
+let core = import('./core');
+
+let handle = fn(sub) {
+    return list();
+};
+
+let list = fn() {
+    let _ = core.logger.scopedTag('listList');
+
+    let pkgInstallRootStr = package.installRoot.str();
+
+    core.logger.info('fetching all packages in `', pkgInstallRootStr, '`');
+
+    let manual = 0, dangling = 0;
+
+    let pkgPaths = vec.new(refs = true);
+
+    let globalModulePaths = feral.getGlobalModulePaths();
+    for p in globalModulePaths.each() {
+        if p.str().find(pkgInstallRootStr) < 0 { continue; }
+        pkgPaths.push(p);
+    }
+
+    manual = pkgPaths.len();
+
+    # pkg-version => packages using this
+    # does not contain manually installed packages
+    let requiredBy = map.new(refs = true);
+
+    # now go through all the `.modulePaths` in each valid package
+    for let i = 0; i < pkgPaths.len(); ++i {
+        let pkgPath = ref(pkgPaths[i]);
+        if !fs.exists(pkgPath / '.modulePaths') { continue; }
+        let depPaths = fs.fopen(pkgPath / '.modulePaths', 'r').readAll().split('\n');
+        for d in depPaths.each() {
+            if d.empty() { continue; }
+            let p = d.path();
+            let key = p.file().str();
+            if !requiredBy.find(key) {
+                requiredBy.insert(key, vec.new(refs = true));
+            }
+            let reqdByList = ref(requiredBy[key]);
+            if !reqdByList.find(pkgPath.file().str()) { reqdByList.push(pkgPath.file().str()); }
+            if !pkgPaths.find(p) { pkgPaths.push(p); }
+        }
+    }
+
+    core.logger.info('installed packages:');
+    core.logger.pushDepth();
+    io.cprintln('{y}installed packages{0}:');
+
+    for p in pkgPaths.each() {
+        let key = p.file().str();
+        let split = key.split('--');
+        let name = split[0];
+        let vers = split[1];
+        let reqdBy = requiredBy.find(key) ? ref(requiredBy[key]) : vec.new();
+        if reqdBy.empty() {
+            core.logger.info('- ', name, '@', vers, ' (manually installed)');
+            io.cprintln('- {c}', name, '{0}@{c}', vers, '{0} ({g}manually installed{0})');
+        } else {
+            core.logger.info('- ', name, '@', vers, ' (required by: ', reqdBy.join(', '), ')');
+            io.cprintln('- {c}', name, '{0}@{c}', vers, '{0} ({y}required by{0}: {c}', reqdBy.join('{0}, {c}'), '{0})');
+        }
+    }
+
+    let installedList = fs.walkDir(package.installRoot, fs.WALK_DIRS);
+    for i in installedList.each() {
+        if pkgPaths.find(i) { continue; }
+        ++dangling;
+        let split = i.file().str().split('--');
+        let name = split[0];
+        let vers = split[1];
+        core.logger.info('- ', name, '@', vers, ' (dangling)');
+        io.cprintln('- {c}', name, '{0}@{c}', vers, '{0} ({r}dangling{0})');
+    }
+
+    core.logger.popDepth();
+
+    core.logger.info('total: ', installedList.len(), '; manually installed: ', manual, '; dangling: ', dangling);
+    io.cprintln('{y}total{0}: {c}', installedList.len(), '{0}; {y}manually installed{0}: {c}', manual, '{0}; {y}dangling{0}: {c}', dangling, '{0}');
+
+    if dangling > 0 {
+        io.cprintln('{by}notice{0}: {y}found {c}', dangling, ' {y}dangling packages{0}; {y}use {0}`{c}feral pkg clean{0}` {y}to remove them{0}!');
+    }
+
+    return true;
+};

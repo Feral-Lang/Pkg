@@ -5,17 +5,11 @@ let os = import('std/os');
 let map = import('std/map');
 let vec = import('std/vec');
 let fecl = import('std/fecl');
+let hashing = import('std/hashing');
 let logging = import('std/logging');
+let package = import('std/package');
 
-let home = feral.libPath / 'pkg';
-let tmpRoot = feral.tempPath / 'pkg';
-let cacheRoot = home / 'cache';
-let indexRoot = home / 'indexes';
-let installRoot = home / 'installed';
-
-fs.mkdir(tmpRoot, cacheRoot, indexRoot, installRoot);
-
-let logFile = tmpRoot / 'pkg.log';
+let logFile = package.tempRoot / 'pkg.log';
 
 let curlCmd = os.name == 'windows' ? os.findExec('curl.exe') : os.findExec('curl');
 let gitCmd = os.name == 'windows' ? os.findExec('git.exe') : os.findExec('git');
@@ -32,11 +26,16 @@ if tarCmd == nil {
 }
 
 ####################################################################################################
+######################################### Toolchain ################################################
+####################################################################################################
+
+let toolchain = import('std/toolchain').new().ok();
+
+####################################################################################################
 ########################################## Logging #################################################
 ####################################################################################################
 
-let logger = logging.newLogger();
-logger.addTargetByPath(logFile);
+let logger = logging.defaultLogger;
 
 let setLogger = fn(newLogger) {
     feral.varReplace('logger', ref(newLogger));
@@ -53,15 +52,15 @@ the archive was extracted. Deletes the archive once extracted.
 "
 let downloadAndExtract = fn(name, vers, url, hash, force = false) {
     let _ = logger.scopedTag('downloadAndExtract');
-    let outDir = getPkgTempPath(name, vers);
+    let outDir = package.getTempPath(name, vers);
     logger.debug('downloading `', name, '@', vers, '` ...');
-    let _ = logging.ScopedDepth();
+    let _ = logger.scopedDepth();
     if fs.exists(outDir) {
         logger.info('pkgTempPath `', outDir, '` already exists!');
         if !force { return feral.ok(outDir); }
         fs.remove(outDir);
     }
-    let archivePath = getPkgArchivePath(name, vers);
+    let archivePath = package.tempRoot / (name.lower() + vers + '.zip');
     let archiveName = archivePath.file();
     if fs.exists(archivePath) {
         let actualHash = hashing.sha256File(archivePath);
@@ -99,16 +98,18 @@ let downloadAndExtract = fn(name, vers, url, hash, force = false) {
     return feral.ok(outDir);
 };
 
-let isPkgManuallyInstalled = fn(dir) {
-    for e in feral.moduleDirs.each() {
-        if e == dir { return true; }
-    }
-    return false;
-};
+####################################################################################################
+########################################### Helpers ################################################
+####################################################################################################
 
-let loadPkgScriptIn = fn(dir, configInfo) {
+let PkgConfigureInfo = struct(
+    pkgRoot = ''.path()
+);
+PkgConfigureInfo.setTypeName('PkgConfigureInfo');
+
+let loadPkgScriptIn = fn(dir) {
     let _ = logger.scopedTag('loadPkgScriptIn');
-    let scriptPath = getPkgScriptPath(dir);
+    let scriptPath = package.getScriptPath(dir);
     logger.trace('loading package script `', scriptPath, '`');
     if !fs.exists(scriptPath) {
         logger.fatal('could not find package script `', scriptPath, '`');
@@ -119,40 +120,16 @@ let loadPkgScriptIn = fn(dir, configInfo) {
         logger.fatal('could not find a function `configure(configInfo)` in script `', scriptPath, '`');
         return feral.err(-1, 'could not find a function `configure(configInfo)` in script `', scriptPath, '`');
     }
-    return script.configure(configInfo);
+    return script.configure(PkgConfigureInfo(dir));
 };
 
 let loadLockFileIn = fn(dir) {
     let _ = logger.scopedTag('loadLockFileIn');
-    let path = getPkgLockPath(dir);
+    let path = package.getLockPath(dir);
     logger.trace('loading lock file in `', path, '`');
     if !fs.exists(path) {
         logger.fatal('could not find package lock file `', path, '`');
         return feral.err(-1, 'could not find package lock file `', path, '`');
     }
     return feral.ok(fecl.loads(fs.fopen(path, 'r').readAll()));
-};
-
-let getPkgCachePath = fn(name, vers) {
-    return cacheRoot / (name.lower() + '--' + vers);
-};
-
-let getPkgInstallPath = fn(name, vers) {
-    return installRoot / (name.lower() + '--' + vers);
-};
-
-let getPkgTempPath = fn(name, vers) {
-    return tmpRoot / (name.lower() + '--' + vers);
-};
-
-let getPkgArchivePath = fn(name, vers) {
-    return tmpRoot / (name.lower() + vers + '.zip');
-};
-
-let getPkgLockPath = fn(dir) {
-    return dir / 'package.lock';
-};
-
-let getPkgScriptPath = fn(dir) {
-    return dir / 'package.fer';
 };

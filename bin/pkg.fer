@@ -2,10 +2,7 @@ let io = import('std/io');
 let logging = import('std/logging');
 let argparse = import('std/argparse');
 
-let pkgCore = import('../lib/core');
-#let pkgInit = import('../lib/init');
-#let pkgLock = import('../lib/lock');
-#let pkgInstall = import('../lib/install');
+let pkgCore = import('pkg/core');
 
 let p = argparse.new('Pkg', 'The Feral package manager');
 let subs = p.addSubparsers('command');
@@ -19,13 +16,15 @@ initSub.addOpt('author').addOpts('--author').setHelp('Author "Name <email>" (def
 initSub.addOpt('desc').addOpts('--desc').setDefault('TODO: add description').setHelp('Short package description');
 
 subs.add('lock', 'Resolve dependencies and generate package.lock');
+subs.add('list', 'Show all installed packages');
+subs.add('clean', 'Remove all dangling installed packages - which are no longer needed');
 
 let installSub = subs.add('install', 'Install a package and all dependencies from package.fer / package.lock');
-installSub.addPos('name').setNargs(-1).setReqd(false).setHelp('Package name (omit to install from package.fer)');
+installSub.addPos('name').setNargs(-1).setReqd(false).setHelp('Package name (omit to install from $PWD/package.fer)');
+installSub.addOpt('type').addOpts('--type').setDefault(feral.buildType.lower()).setHelp('Build type: debug/release/relwithdebinfo (default: ' + feral.buildType.lower() + ')');
 
 let uninstallSub = subs.add('uninstall', 'Uninstall an installed package');
-uninstallSub.addPos('name').setReqd(true).setHelp('Package name');
-uninstallSub.addOpt('version').addOpts('--version').setHelp('Package version to uninstall');
+uninstallSub.addPos('name').setNargs(-1).setReqd(false).setHelp('Package name (omit to install from $PWD/package.fer)');
 
 let indexSub = subs.add('index', 'Manage package indices');
 let indexSubSubs = indexSub.addSubparsers('indexcmd');
@@ -39,12 +38,34 @@ indexSubSubs.add('list', 'List all registered indices');
 
 p.parse(feral.args);
 
+let logger = logging.newLogger();
+logger.addTargetByPath(pkgCore.logFile, level = logging.Levels.TRACE);
+pkgCore.setLogger(logger);
+
 let cmd = p.getSubcmd();
 let sub = p.getSubparser();
 
 if cmd == 'index' {
-    let pkgIndex = import('../lib/index');
+    let pkgIndex = import('pkg/index');
     feral.exit(pkgIndex.handle(sub) ? 0 : 1);
+} elif cmd == 'init' {
+    let pkgInit = import('pkg/init');
+    feral.exit(pkgInit.handle(sub) ? 0 : 1);
+} elif cmd == 'list' {
+    let pkgList = import('pkg/list');
+    feral.exit(pkgList.handle(sub) ? 0 : 1);
+} elif cmd == 'lock' {
+    let pkgLock = import('pkg/lock');
+    feral.exit(pkgLock.handle(sub) ? 0 : 1);
+} elif cmd == 'install' {
+    let pkgInstall = import('pkg/install');
+    feral.exit(pkgInstall.handle(sub) ? 0 : 1);
+} elif cmd == 'uninstall' {
+    let pkgUninstall = import('pkg/uninstall');
+    feral.exit(pkgUninstall.handle(sub) ? 0 : 1);
+} elif cmd == 'clean' {
+    let pkgClean = import('pkg/clean');
+    feral.exit(pkgClean.handle(sub) ? 0 : 1);
 }
 if !pkgCore.hasHandler(cmd) {
     p.printHelp();

@@ -1,0 +1,71 @@
+# Cleans all dangling packages.
+
+let io = import('std/io');
+let fs = import('std/fs');
+let vec = import('std/vec');
+let package = import('std/package');
+
+let core = import('./core');
+
+let handle = fn(sub) {
+    return cleanup();
+};
+
+let cleanup = fn() {
+    let _ = core.logger.scopedTag('cleanCleanup');
+
+    let pkgInstallRootStr = package.installRoot.str();
+
+    core.logger.info('cleaning unused packages in `', pkgInstallRootStr, '`');
+    io.cprintln('{y}cleaning up {0}...');
+    io.fflush(io.stdout);
+
+    let validPkgPaths = vec.new(refs = true);
+    let globalModulePaths = feral.getGlobalModulePaths();
+    for p in globalModulePaths.each() {
+        if p.str().find(pkgInstallRootStr) < 0 { continue; }
+        validPkgPaths.push(p);
+    }
+
+    # now go through all the `.modulePaths` in each valid package, and add it to the list.
+    for let i = 0; i < validPkgPaths.len(); ++i {
+        let pkgPath = ref(validPkgPaths[i]);
+        if !fs.exists(pkgPath / '.modulePaths') { continue; }
+        let depPaths = fs.fopen(pkgPath / '.modulePaths', 'r').readAll().split('\n');
+        for d in depPaths.each() {
+            if d.empty() || validPkgPaths.find(d.path()) { continue; }
+            validPkgPaths.push(d.path());
+        }
+    }
+
+    core.logger.info('total valid packages: ', validPkgPaths.len());
+
+    let allPkgPaths = fs.walkDir(package.installRoot, fs.WALK_DIRS);
+
+    let danglingPkgs = vec.new(refs = true);
+    for p in allPkgPaths.each() {
+        if validPkgPaths.find(p) { continue; }
+        danglingPkgs.push(p);
+    }
+
+    core.logger.info('complete package info:');
+    core.logger.info('-    total: ', allPkgPaths.len());
+    core.logger.info('-    valid: ', validPkgPaths.len());
+    core.logger.info('- dangling: ', danglingPkgs.len());
+
+    core.logger.info('removing dangling packages:');
+
+    core.logger.pushDepth();
+    for d in danglingPkgs.each() {
+        core.logger.info(d);
+        let split = d.file().str().split('--');
+        let name = split[0];
+        let vers = split[1];
+        io.cprintln('- {c}', name, '{0}@{c}', vers, '{0}');
+        fs.remove(d);
+    }
+    core.logger.popDepth();
+
+    io.cprintln('{g}cleaned up {c}', danglingPkgs.len(), ' {g}dangling packages{0}!');
+    return true;
+};

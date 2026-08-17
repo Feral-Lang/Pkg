@@ -1,0 +1,75 @@
+# Uninstalls all given packages.
+
+let io = import('std/io');
+let fs = import('std/fs');
+let os = import('std/os');
+let vec = import('std/vec');
+let package = import('std/package');
+
+let core = import('./core');
+
+let handle = fn(sub) {
+    let names = sub.getValues('name');
+    if names.empty() {
+        return uninstall(dir = os.getCWD());
+    }
+    for name in names.each() {
+        if !uninstall(name = name) { return false; }
+    }
+    return true;
+};
+
+let uninstall = fn(.kw) {
+    let _ = core.logger.scopedTag('uninstallUninstall');
+
+    let dir = kw['dir'] ?? ''.path();
+    let name = kw['name'] ?? '';
+
+    let pkgInstallRootStr = package.installRoot.str();
+
+    let manuallyInstalledPkgPaths = vec.new(refs = true);
+    let globalModulePaths = feral.getGlobalModulePaths();
+    for p in feral.moduleDirs.each() {
+        if p.str().find(pkgInstallRootStr) < 0 { continue; }
+        manuallyInstalledPkgPaths.push(p);
+    }
+
+    let installPathStr = '';
+    if !name.empty() {
+        core.logger.info('uninstalling package `', name, '`');
+        io.cprint('{y}uninstalling package {c}', name, ' {0}... ');
+        io.fflush(io.stdout);
+        installPathStr = package.getInstallPath(name, '').str();
+    } else {
+        core.logger.info('uninstalling package in `', dir, '`');
+        io.cprint('{y}uninstalling package in {c}', dir, '{0} ... ');
+        io.fflush(io.stdout);
+        let pkgRes = core.loadPkgScriptIn(dir);
+        if pkgRes.isErr() {
+            core.logger.fatal('failed to load package script in `', dir, '`');
+            io.println();
+            io.cprintln('{br}FATAL{0}: {y}failed to load package script in {c}', dir, '{0}:');
+            io.cprintln(pkgRes.val().msg());
+            return false;
+        }
+        let pkg = pkgRes.val();
+        name = pkg.name;
+        installPathStr = package.getInstallPath(pkg.name, pkg.version.str()).str();
+    }
+
+    let installPath = ''.path();
+    for p in manuallyInstalledPkgPaths.each() {
+        if p.str().find(installPathStr) < 0 { continue; }
+        installPath = p;
+        break;
+    }
+    if installPath.str().empty() {
+        io.println();
+        io.cprintln('{br}FATAL{0}: {y}could not find a manually installed version of package {c}', name, '{y} to uninstall{0}!');
+        return false;
+    }
+    feral.removeGlobalModulePaths(installPath);
+    fs.remove(installPath);
+    io.cprintln('{g}success{0}!');
+    return true;
+};
