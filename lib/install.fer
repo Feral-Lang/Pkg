@@ -260,6 +260,8 @@ let installLocal = fn(dir, isManual, cleanup, show) {
         if os.name == 'windows' {
             destLib.addDllPaths(installLibRoot / dest.file());
             destFiles.push(dest.str().replace('.lib', '.dll').path());
+            let pdbFile = dest.str().replace('.lib', '.pdb').path();
+            if fs.exists(pdbFile) { destFiles.push(pdbFile); }
         }
         builtTargets.insert(t.name, destLib);
     }

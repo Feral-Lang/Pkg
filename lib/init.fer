@@ -135,9 +135,9 @@ let writePackageScript = fn(dir, name, desc, version, feralConstr, author) {
     io.fprintln(f, "    );");
     io.fprintln(f, "");
     io.fprintln(f, "    # Sample C library dependency");
-    io.fprintln(f, "    # pkg.requires('CURL', version = '~3.0.0');");
+    io.fprintln(f, "    # pkg.requires('CURL', version = '>=3.0.0');");
     io.fprintln(f, "    # Sample Feral library dependency");
-    io.fprintln(f, "    # pkg.requires('Progress', version = '>=0.1.0', feral = true);");
+    io.fprintln(f, "    # pkg.requires('Progress', version = '~0.1.0', feral = true);");
     io.fprintln(f, "");
     io.fprintln(f, "    # `info.pkgRoot` contains the package root directory and can be used");
     io.fprintln(f, "    # to work with paths/files relative to the package root.");
