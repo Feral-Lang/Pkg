@@ -263,7 +263,7 @@ let getInstalled = fn(name, .kw) {
 ####################################################################################################
 
 let statePath = package.indexRoot / 'state.fecl';
-let stateUpdateInterval = time.to(time.second, days = 7);
+let stateUpdateInterval = time.days(7).int();
 
 let state = map.new();
 
@@ -306,15 +306,14 @@ let isIndexUpdated = fn(indexStr) {
         saveState();
         return false;
     }
-    let nowSec = time.resolve(time.now(), time.second).int();
-    return nowSec - state[indexStr] < stateUpdateInterval;
+    return time.now().int() - state[indexStr] < stateUpdateInterval;
 };
 
 let markIndexUpdated = fn(indexStr) {
     if !state.find(indexStr) {
         state.insert(indexStr, 0);
     }
-    state[indexStr] = time.resolve(time.now(), time.second).int();
+    state[indexStr] = time.now().int();
     saveState();
     return true;
 };

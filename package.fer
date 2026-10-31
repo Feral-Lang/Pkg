@@ -5,12 +5,14 @@ let configure = fn(info) {
     let pkg = package.new(
         'Pkg',
         desc = 'Feral package manager',
-        version = '0.2.0',
-        feral = '>=2.0.1',
+        version = '0.3.0',
+        feral = '>=2.7.0',
         authors = vec.new(
             'Electrux'
         )
     );
+
+    pkg.addConfigFile(info.pkgRoot / 'lib' / 'core.fer.in', info.pkgRoot / 'lib' / 'core.fer');
 
     return feral.ok(pkg);
 };

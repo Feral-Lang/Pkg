@@ -9,6 +9,8 @@ let hashing = import('std/hashing');
 let logging = import('std/logging');
 let package = import('std/package');
 
+let version = '$<<PACKAGE_VERSION_MAJOR>>.$<<PACKAGE_VERSION_MINOR>>.$<<PACKAGE_VERSION_PATCH>>';
+
 let logFile = package.tempRoot / 'pkg.log';
 
 let curlCmd = os.name == 'windows' ? os.findExec('curl.exe') : os.findExec('curl');
